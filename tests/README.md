@@ -15,6 +15,7 @@ python -m http.server 8001
 ```sh
 node tests/browser.cjs
 node tests/backgrounds.cjs
+node tests/background-style.cjs
 ```
 
 기본 주소는 `http://127.0.0.1:8001`, `GAME_URL`로 변경할 수 있습니다. `CHROMIUM_PATH`로 브라우저 실행 파일을 지정할 수 있습니다. Linux의 `/usr/bin/chromium`이 있으면 우선 사용하며 그 외에는 Playwright 브라우저를 사용합니다.

@@ -3,6 +3,10 @@
   const $ = id => document.getElementById(id);
   const canvas = $('game');
   const ctx = canvas.getContext('2d');
+  // Background only. Blur is measured in CSS pixels; 1 is unchanged color strength.
+  const BACKGROUND_STYLE = { blurPx: 1.25, saturation: .94, contrast: .94 };
+  const backgroundLayer = document.createElement('canvas');
+  const backgroundCtx = backgroundLayer.getContext('2d');
   const asset = {
     backgrounds: ['assets/backgrounds/bbaakk1.jpg'],
     characters: [1, 2, 3, 4, 5, 6, 7, 8, 9].map(n =>
@@ -29,6 +33,7 @@
   let distance = 0, time = 0, runTime = 0, spawnIn = .5, invincible = 0;
   let boostRemaining = 0, giantRemaining = 0, visualScale = 1, orangeSequence = 0, objects = [], effects = [], last = 0;
   let worldWidth = 1100, tiles = [], patternIndex = 0;
+  let canvasPixelRatio = 1;
   const obstaclePaths = OBSTACLES.map(o => o.path);
   const paths = [...Object.values(asset).flat(), ...obstaclePaths];
 
@@ -90,6 +95,7 @@
     const r = canvas.getBoundingClientRect(), dpr = Math.min(devicePixelRatio || 1, 2);
     worldWidth = H * r.width / r.height;
     canvas.width = Math.round(r.width * dpr); canvas.height = Math.round(r.height * dpr);
+    canvasPixelRatio = canvas.width / r.width;
   }
   addEventListener('resize', resize); resize();
 
@@ -298,17 +304,53 @@
     ctx.restore();
   }
   function background() {
-    ctx.fillStyle = '#d9ecfa'; ctx.fillRect(0, 0, worldWidth, H);
-    if (!tiles.length) return;
-    const total = tiles.reduce((sum, t) => sum + t.width, 0), offset = (distance * 20 * .65) % total;
+    ctx.filter = 'none';
+    if (!tiles.length) {
+      ctx.fillStyle = '#d9ecfa'; ctx.fillRect(0, 0, worldWidth, H);
+      return;
+    }
+    const pixelRatio = canvasPixelRatio;
+    const blur = Math.max(0, BACKGROUND_STYLE.blurPx) * pixelRatio;
+    const padding = Math.ceil(blur * 4) + 2;
+    const layerWidth = canvas.width + padding * 2;
+    const layerHeight = canvas.height + padding * 2;
+    if (backgroundLayer.width !== layerWidth || backgroundLayer.height !== layerHeight) {
+      backgroundLayer.width = layerWidth; backgroundLayer.height = layerHeight;
+    }
+    const scaleX = canvas.width / worldWidth, scaleY = canvas.height / H;
+    const padX = padding / scaleX, padY = padding / scaleY;
+    backgroundCtx.setTransform(1, 0, 0, 1, 0, 0);
+    backgroundCtx.filter = 'none';
+    backgroundCtx.fillStyle = '#d9ecfa'; backgroundCtx.fillRect(0, 0, layerWidth, layerHeight);
+    backgroundCtx.setTransform(scaleX, 0, 0, scaleY, padding, padding);
+    backgroundCtx.imageSmoothingEnabled = true; backgroundCtx.imageSmoothingQuality = 'high';
+    const total = tiles.reduce((sum, t) => sum + t.width, 0);
+    const offset = (distance * 20 * .65) % total;
     for (let cycle = -1; cycle <= 1; cycle++) {
       let x = cycle * total - offset;
       for (const tile of tiles) {
-        if (x < worldWidth && x + tile.width > 0) ctx.drawImage(tile.image, x, 0, tile.width, H);
+        if (x < worldWidth + padX && x + tile.width > -padX) {
+          backgroundCtx.drawImage(tile.image, x, 0, tile.width, H);
+          // Extend only offscreen edge pixels into the blur's sampling margin.
+          // The entire visible source keeps its exact aspect ratio and composition.
+          const img = tile.image;
+          backgroundCtx.drawImage(img, 0, 0, img.naturalWidth, 1, x, -padY, tile.width, padY);
+          backgroundCtx.drawImage(img, 0, img.naturalHeight - 1, img.naturalWidth, 1, x, H, tile.width, padY);
+        }
         x += tile.width;
       }
     }
-    // No floating trees, scrolls, coins or decorative image particles.
+    // Filter the already-joined background once, avoiding transparent blur seams
+    // between individual tiles. Never filter the canvas element or foreground.
+    ctx.save();
+    try {
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.filter = `blur(${blur}px) saturate(${BACKGROUND_STYLE.saturation}) contrast(${BACKGROUND_STYLE.contrast})`;
+      ctx.drawImage(backgroundLayer, -padding, -padding);
+    } finally {
+      ctx.restore();
+      ctx.filter = 'none';
+    }
   }
   function sparkle(x, y, size, alpha) {
     ctx.save(); ctx.globalAlpha = alpha; ctx.strokeStyle = '#fff5c3'; ctx.lineWidth = 1.5; ctx.lineCap = 'round';
