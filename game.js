@@ -26,14 +26,31 @@
   const images = {}, silhouettes = {}, alphaBounds = {}, masks = {}, failed = [];
   const H = 500, GROUND = 461;
   const GRAVITY = 1800, FIRST_JUMP = 640, SECOND_JUMP = 620;
-  const SPEED = 306; // +17.69% from 260. Brush speed is exactly 459.
+  const SPEED = 306;
+  const DIFFICULTY = [
+    { start:0, name:'쉬움', speed:1, recovery:.48, extra:400, recipes:[['single'],['flat'],['single'],['single']] },
+    { start:20, name:'보통', speed:1.08, recovery:.36, extra:280, recipes:[['single'],['single'],['double'],['flat']] },
+    { start:45, name:'어려움', speed:1.16, recovery:.28, extra:160, recipes:[['single','double'],['double'],['double','single'],['single']] },
+    { start:75, name:'도전', speed:1.23, recovery:.22, extra:60, recipes:[['single','single'],['double','single'],['single','double'],['single','single','double']] },
+    { start:110, name:'고수', speed:1.28, recovery:.18, extra:0, recipes:[['single','double','single'],['double','single','double'],['single','single'],['double','double'],['single','double']] }
+  ];
+  const SPEED_RAMP_SECONDS = 3;
+  const MAX_SPEED = SPEED * 1.28 * 1.5;
+  const SPACING_MARGIN = 48; // body alignment plus approximately 30ms input slack
+  const SINGLE_FLIGHT = 2 * FIRST_JUMP / GRAVITY;
+  const SECOND_AT = .24;
+  const secondHeight = FIRST_JUMP * SECOND_AT - .5 * GRAVITY * SECOND_AT ** 2;
+  const DOUBLE_FLIGHT = SECOND_AT + (SECOND_JUMP + Math.sqrt(SECOND_JUMP ** 2 + 2 * GRAVITY * secondHeight)) / GRAVITY;
   const BOOST_SECONDS = 5, GIANT_SECONDS = 5, BOOST_FACTOR = 1.5;
   const player = { x: 106, y: 363, w: 74, h: 98, vy: 0, grounded: true, land: 0, jumps: 0 };
   let loaded = false, mode = 'loading', score = 0, health = 3;
   let distance = 0, time = 0, runTime = 0, spawnIn = .5, invincible = 0;
   let boostRemaining = 0, giantRemaining = 0, visualScale = 1, orangeSequence = 0, objects = [], effects = [], last = 0;
   let worldWidth = 1100, tiles = [], patternIndex = 0;
-  let canvasPixelRatio = 1;
+  let canvasPixelRatio = 1, viewportSpeedCap = MAX_SPEED;
+  let currentStage = 0, stageNoticeRemaining = 0;
+  let nextBrushAt = 14, nextGiantAt = 6;
+  let obstacleChoices = { single:0, double:0 };
   const obstaclePaths = OBSTACLES.map(o => o.path);
   const paths = [...Object.values(asset).flat(), ...obstaclePaths];
 
@@ -94,6 +111,9 @@
   function resize() {
     const r = canvas.getBoundingClientRect(), dpr = Math.min(devicePixelRatio || 1, 2);
     worldWidth = H * r.width / r.height;
+    player.x = Math.min(106, Math.max(32, 32+(worldWidth-320)*.20));
+    // Keep a visible approach window on narrow phones, even for the scroll.
+    viewportSpeedCap = Math.max(SPEED*1.28, Math.min(MAX_SPEED, (worldWidth-(player.x+player.w/2)+46)/(.62+.12)));
     canvas.width = Math.round(r.width * dpr); canvas.height = Math.round(r.height * dpr);
     canvasPixelRatio = canvas.width / r.width;
   }
@@ -105,6 +125,7 @@
     $('health').setAttribute('aria-label', `체력 ${health} / 3`);
     $('health-fill').style.width = `${health / 3 * 100}%`;
     $('distance').textContent = `${Math.floor(distance)} m`;
+    $('difficulty-note').hidden = stageNoticeRemaining <= 0;
     $('boost').hidden = boostRemaining <= 0;
     $('boost-time').textContent = `${Math.ceil(boostRemaining)}초`;
     $('boost').setAttribute('aria-label', `가속 남은 시간 ${Math.ceil(boostRemaining)}초`);
@@ -121,6 +142,7 @@
     score = 0; health = 3; distance = 0; time = 0; runTime = 0;
     spawnIn = .5; patternIndex = 0; invincible = 0; boostRemaining = 0; giantRemaining = 0; visualScale = 1; orangeSequence = 0;
     objects = []; effects = [];
+    currentStage = 0; stageNoticeRemaining = 0; nextBrushAt = 14; nextGiantAt = 6; obstacleChoices = {single:0,double:0};
     Object.assign(player, { y: GROUND - player.h, vy: 0, grounded: true, land: 0, jumps: 0 });
     mode = 'running'; panel(null); canvas.focus({preventScroll:true}); $('pause').disabled = false;
     $('pause').setAttribute('aria-label', '일시 정지');
@@ -161,39 +183,101 @@
     const atSecond = -FIRST_JUMP * secondAt + .5 * GRAVITY * secondAt * secondAt, after = t - secondAt;
     return atSecond - SECOND_JUMP * after + .5 * GRAVITY * after * after;
   }
+  function difficultyAt(at = time) {
+    let index = 0;
+    for (let i=1;i<DIFFICULTY.length;i++) if (at >= DIFFICULTY[i].start) index = i;
+    return { ...DIFFICULTY[index], index };
+  }
+  function difficultySpeed(at = time) {
+    const level = difficultyAt(at);
+    if (!level.index) return 1;
+    const t = Math.max(0, Math.min(1, (at-level.start)/SPEED_RAMP_SECONDS));
+    return DIFFICULTY[level.index-1].speed + (level.speed-DIFFICULTY[level.index-1].speed)*t*t*(3-2*t);
+  }
+  function brushFactor(remaining = boostRemaining) {
+    const t = Math.max(0, Math.min(1, remaining/.25));
+    return 1 + (BOOST_FACTOR-1)*t*t*(3-2*t);
+  }
+  function predictTravel(seconds, at = time, boost = boostRemaining) {
+    const steps = Math.max(1, Math.ceil(seconds/.02)), dt = seconds/steps;
+    let travel = 0;
+    for(let i=0;i<steps;i++) {
+      const t=(i+.5)*dt;
+      travel += Math.min(viewportSpeedCap,SPEED*difficultySpeed(at+t)*brushFactor(Math.max(0,boost-t)))*dt;
+    }
+    return travel;
+  }
+  function arrivalTime(pixels) {
+    let low=0, high=Math.max(0,pixels)/SPEED+1;
+    for(let i=0;i<20;i++) {
+      const mid=(low+high)/2;
+      if(predictTravel(mid)<pixels) low=mid; else high=mid;
+    }
+    return (low+high)/2;
+  }
+  function landingGap(previous, next, level) {
+    // Even if a brush starts/expires or the difficulty changes between obstacles:
+    // max travel until landing+recovery+next lead, minus min prior approach.
+    const flight = previous.kind==='double' ? DOUBLE_FLIGHT : SINGLE_FLIGHT;
+    return MAX_SPEED*(flight+level.recovery+next.lead)-SPEED*previous.lead+SPACING_MARGIN+level.extra;
+  }
   function spawn() {
-    const kind = ['flat', 'single', 'flat', 'double'][patternIndex % 4];
-    const anchor = worldWidth + 40;
-    const variants = OBSTACLES.filter(o => o.kind === kind);
-    const descriptor = variants[Math.floor(patternIndex / 4) % variants.length];
-    let obstacle = null;
-    if (descriptor && images[descriptor.path]) {
-      const img = images[descriptor.path], h = descriptor.height, w = h * img.naturalWidth / img.naturalHeight;
-      obstacle = { type: 'obstacle', path: descriptor.path, core: descriptor.core,
-        x: anchor + SPEED * (kind === 'double' ? .5 : .355) - w / 2,
-        y: GROUND - h, w, h, hit: false, pattern: kind };
-      objects.push(obstacle);
+    const level = difficultyAt();
+    const recipe = level.recipes[patternIndex % level.recipes.length];
+    const anchor = worldWidth+60, nodes=[];
+    for(let i=0;i<recipe.length;i++) {
+      const kind = recipe[i];
+      const lead = kind==='double' ? [.54,.58,.62][(patternIndex+i)%3] : [.34,.37,.40][(patternIndex+i)%3];
+      const node = {kind, lead, center:anchor};
+      if(nodes.length) {
+        const previous = nodes.at(-1);
+        node.center = previous.center+landingGap(previous,node,level);
+      }
+      nodes.push(node);
     }
-    const times = kind === 'double' ? [.13, .23, .37, .49, .61, .74, .88] :
-      kind === 'single' ? [.12, .22, .32, .42, .52, .62] : [0, .17, .34, .51, .68, .85];
-    for (let i = 0; i < times.length; i++) {
-      const t = times[i], path = asset.items[orangeSequence % asset.items.length];
-      if (!images[path]) continue;
-      const centerY = kind === 'flat' ? GROUND - 48 : GROUND + jumpOffset(t, kind === 'double') - player.h / 2;
-      const o = { type: 'orange', path, x: anchor + SPEED * t - 18,
-        y: Math.max(90, Math.min(GROUND - 38, centerY - 18)), w: 36, h: 36, hit: false, phase: i * .7, pattern: kind };
-      if (!obstacle || !overlap({ ...o, y: o.y - 5, h: o.h + 10 }, obstacle)) { objects.push(o); orangeSequence++; }
+    const created=[];
+    for(const node of nodes) {
+      if(node.kind==='flat') continue;
+      const variants=OBSTACLES.filter(o=>o.kind===node.kind);
+      const descriptor=variants[obstacleChoices[node.kind]++ % variants.length];
+      if(!descriptor || !images[descriptor.path]) continue;
+      const img=images[descriptor.path], h=descriptor.height, w=h*img.naturalWidth/img.naturalHeight;
+      const obstacle={type:'obstacle',path:descriptor.path,core:descriptor.core,
+        x:node.center-w/2,y:GROUND-h,w,h,hit:false,pattern:node.kind,
+        lead:node.lead,stage:level.index,group:patternIndex,order:created.length};
+      created.push(obstacle); objects.push(obstacle);
     }
-    // An occasional, ground-accessible brush, separated from the jump trails.
-    if (kind === 'flat' && patternIndex % 12 === 4 && images[asset.brush[0]]) {
-      objects.push({ type: 'brush', path: asset.brush[0], x: anchor + SPEED * 1.2 - 19,
-        y: GROUND - 80, w: 38, h: 47, hit: false, phase: 0, pattern: kind });
+    for(const node of nodes) {
+      const reaches=arrivalTime(node.center-(player.x+player.w/2));
+      const jumpAt=Math.max(0,reaches-node.lead);
+      const at=time+jumpAt, boost=Math.max(0,boostRemaining-jumpAt);
+      const approach=predictTravel(node.lead,at,boost);
+      const samples=node.kind==='flat' ? [0,.17,.34,.51,.68,.85] :
+        node.kind==='double' ? [.16,.28,.42,.56,.70,.84] : [.10,.22,.34,.46,.58];
+      for(const t of samples) {
+        const path=asset.items[orangeSequence%asset.items.length]; if(!images[path]) continue;
+        const x=node.kind==='flat' ? node.center+predictTravel(t,at,boost) : node.center+predictTravel(t,at,boost)-approach;
+        const y=node.kind==='flat' ? GROUND-48 : GROUND+jumpOffset(t,node.kind==='double')-player.h/2;
+        const orange={type:'orange',path,x:x-18,y:Math.max(90,Math.min(GROUND-38,y-18)),w:36,h:36,hit:false,phase:orangeSequence*.7,pattern:node.kind};
+        if(created.some(o=>overlap({...orange,y:orange.y-5,h:orange.h+10},o))) continue;
+        objects.push(orange); orangeSequence++;
+      }
     }
-    if (kind === 'flat' && patternIndex % 8 === 0 && images[asset.giant[0]]) {
-      objects.push({ type: 'giant', path: asset.giant[0], x: anchor + SPEED * 1.65 - 20,
-        y: GROUND - 80, w: 40, h: 46, hit: false, phase: 0, pattern: kind });
+    const lastNode=nodes.at(-1);
+    let after=lastNode.kind==='flat' ? 1000+level.extra : landingGap(lastNode,{lead:.62},level);
+    const specials=[];
+    if(time>=nextBrushAt && images[asset.brush[0]]) {specials.push('brush'); nextBrushAt=time+36;}
+    if(time>=nextGiantAt && images[asset.giant[0]]) {specials.push('giant'); nextGiantAt=time+28;}
+    if(specials.length) {
+      // Ground-level item rest area after landing, before any next jump begins.
+      const flight=lastNode.kind==='double'?DOUBLE_FLIGHT:SINGLE_FLIGHT;
+      const rest=lastNode.kind==='flat'?330:MAX_SPEED*(flight+level.recovery)-SPEED*lastNode.lead+48;
+      specials.forEach((type,i)=>objects.push({type,path:asset[type][0],x:lastNode.center+rest+i*100-20,
+        y:GROUND-80,w:type==='giant'?40:38,h:46,hit:false,phase:0}));
+      after=Math.max(after,rest+specials.length*100+MAX_SPEED*.85);
     }
-    patternIndex++; spawnIn = 2.9;
+    patternIndex++;
+    spawnIn=(lastNode.center-anchor+after)/SPEED;
   }
 
   function spriteRect(o) {
@@ -225,8 +309,7 @@
     return false;
   }
   function movementFactor() {
-    const t = Math.min(1, boostRemaining / .25);
-    return 1 + (BOOST_FACTOR - 1) * t * t * (3 - 2 * t);
+    return Math.min(viewportSpeedCap/SPEED, 1.28*BOOST_FACTOR, difficultySpeed()*brushFactor());
   }
   function collectEffect(amount) {
     const recent = effects.find(e => e.type === 'collect' && e.life > .08);
@@ -244,6 +327,12 @@
   function advance(realDt, factor) {
     const runDt = realDt * factor;
     time += realDt; runTime += runDt;
+    stageNoticeRemaining=Math.max(0,stageNoticeRemaining-realDt);
+    const stage=difficultyAt().index;
+    if(stage!==currentStage) {
+      currentStage=stage; stageNoticeRemaining=1;
+      $('difficulty-note').textContent='시험이 어려워지고 있도다!';
+    }
     invincible = Math.max(0, invincible - realDt); player.land = Math.max(0, player.land - realDt);
     boostRemaining = Math.max(0, boostRemaining - realDt);
     if (boostRemaining < 1e-9) boostRemaining = 0;
@@ -254,7 +343,7 @@
     if (Math.abs(targetScale - visualScale) < .001) visualScale = targetScale;
     distance += SPEED * runDt / 20;
     if (!player.grounded) {
-      player.y += player.vy * runDt + .5 * GRAVITY * runDt * runDt; player.vy += GRAVITY * runDt;
+      player.y += player.vy * realDt + .5 * GRAVITY * realDt * realDt; player.vy += GRAVITY * realDt;
     }
     if (player.y + player.h >= GROUND) {
       if (!player.grounded) player.land = .14;
@@ -286,7 +375,8 @@
   function update(dt) {
     if (mode !== 'running') return;
     // Real-time boost clock and movement clock are separate. Small steps avoid tunnelling
-    // at 459px/s and split exactly at the 5-second expiration boundary.
+    // up to 587.52px/s and split exactly at item expiration boundaries.
+    // Vertical physics always uses realDt, independent of either speed multiplier.
     let remaining = dt;
     while (remaining > 1e-9 && mode === 'running') {
       const factor = movementFactor();

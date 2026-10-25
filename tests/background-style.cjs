@@ -3,7 +3,9 @@ const {chromium}=require('playwright');
 const output=path.resolve(__dirname,'../work/validation');fs.mkdirSync(output,{recursive:true});
 const source=fs.readFileSync(path.resolve(__dirname,'../game.js'),'utf8').replace(' hud();requestAnimationFrame(frame);',`
 window.backgroundStyleTest={
- scenario:index=>{start();objects=[];patternIndex=index;spawn();spawnIn=1e6;const shift=worldWidth+40-(player.x+player.w/2);objects=objects.filter(o=>['orange','obstacle'].includes(o.type));objects.forEach(o=>o.x-=shift);
+ scenario:index=>{start();objects=[];spawnIn=1e6;const n=Math.max(0,[1,5,3,7,11].indexOf(index)),d=OBSTACLES[n],img=images[d.path],h=d.height,w=h*img.naturalWidth/img.naturalHeight;
+ objects.push({type:'obstacle',path:d.path,core:d.core,x:player.x+150,y:GROUND-h,w,h});
+ asset.items.forEach((path,i)=>objects.push({type:'orange',path,x:player.x+40+i*45,y:GROUND+jumpOffset(.10+i*.12,true)-player.h/2-18,w:36,h:36,phase:i}));
  for(const type of ['brush','giant'])objects.push({type,path:asset[type][0],x:player.x+(type==='brush'?320:380),y:GROUND-90,w:36,h:43,phase:0});mode='paused';},
  style:s=>Object.assign(BACKGROUND_STYLE,s),render,
  filter:()=>ctx.filter,
