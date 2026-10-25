@@ -33,3 +33,5 @@ node tests/background-style.cjs
 `balance.cjs`는 직전 커밋 `7a7b5c5`의 고정 입력 결과(`fixtures/balance-before.json`)와 새 패턴 밀도를 비교하고, 10초 2단 장애물 도입·거대화 종료 안전 전환을 검사합니다. 자동 입력 생존 시간은 사람의 숙련도를 측정한 값이 아닙니다.
 
 `orientation.cjs`는 Chromium의 Android/iPhone 크기·터치 에뮬레이션으로 첫 접속의 CSS 회전, 세로↔가로 반복 전환, 뷰포트 높이 변경, Canvas의 논리 비율과 래스터 크기, 회전된 버튼/화면 터치, 상태 유지와 화면 잘림을 검사합니다. 실제 Safari/Android Chrome 기기 검증은 별도 필요합니다.
+
+`result-panel.cjs`는 원본 PNG 안에 인쇄된 제목·예시 점수·파란 버튼의 실제 픽셀이 CSS 마스크로 가려지는지 검사합니다. 36개 화면/점수 조합의 정렬·간격, 실제 귤 수집 후 최종 점수, 재시작 전체 초기화도 확인합니다. 점수 주입은 테스트 응답에만 있고 운영 게임 코드에는 없습니다.
