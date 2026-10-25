@@ -21,6 +21,8 @@ node tests/pause-image.cjs
 node tests/collection.cjs
 node tests/giant-smash.cjs
 node tests/difficulty.cjs
+node tests/random-patterns.cjs
+node tests/performance.cjs
 node tests/balance.cjs
 node tests/backgrounds.cjs
 node tests/background-style.cjs
@@ -32,7 +34,7 @@ node tests/background-style.cjs
 
 `difficulty.cjs`는 미래 이동량을 예측하는 자동 입력으로 회피 가능한 경로와 착지 공간을 검증합니다. 실제 플레이어의 성공률을 측정하는 테스트는 아닙니다.
 
-`balance.cjs`는 직전 커밋 `7a7b5c5`의 고정 입력 결과(`fixtures/balance-before.json`)와 새 패턴 밀도를 비교하고, 10초 2단 장애물 도입·거대화 종료 안전 전환을 검사합니다. 자동 입력 생존 시간은 사람의 숙련도를 측정한 값이 아닙니다.
+`balance.cjs`는 고정 시드의 자동 입력 정책과10초 2단 장애물 도입·거대화 종료 안전 전환을 검사합니다. 과거 `fixtures/balance-before.json`은 이전 밸런스 기록입니다. 자동 입력 생존 시간은 사람의 숙련도를 측정한 값이 아닙니다.
 
 `orientation.cjs`는 Chromium의 Android/iPhone 크기·터치 에뮬레이션으로 첫 접속의 CSS 회전, 세로↔가로 반복 전환, 뷰포트 높이 변경, Canvas의 논리 비율과 래스터 크기, 회전된 버튼/화면 터치, 상태 유지와 화면 잘림을 검사합니다. 실제 Safari/Android Chrome 기기 검증은 별도 필요합니다.
 
@@ -41,3 +43,5 @@ node tests/background-style.cjs
 `ui-details.cjs`는 `613e78b`의 CSS와 비교해 버튼 축소율·제목 이동·멈춤 버튼 크기 유지를 측정합니다(해당 커밋을 포함한 Git 기록 필요). 일시정지 이미지 전환 반복·실패 시 대체, 0~3 체력 숫자 중앙 정렬, 실제 44px 터치 확장 영역 클릭도 검사합니다.
 
 `pause-image.cjs`는 PNG 실제 포맷·알파·원본 크기·불투명 RGB 일치·꽃잎/하이라이트 보존·외곽 체크무늬 투명을 검사합니다. `background-style.cjs`는 3px/83%/88% 기본 설정과 DPR별 강도, 모든 전경의 filter=none 및 불투명한 반복 경계를 검사합니다.
+
+`random-patterns.cjs`는 시드별 다양성·아이템 희귀성·중간 배치의 회피/수집을 검증합니다. `performance.cjs`는 `0195379`의 코드와 캐시 구현을 같은 장면으로 비교하므로 해당 커밋을 포함한 Git 기록이 필요합니다. 벤치마크는 픽셀 읽기를 강제한 비용이며 실제 FPS 측정이 아닙니다.

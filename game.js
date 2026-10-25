@@ -7,6 +7,10 @@
   const BACKGROUND_STYLE = { blurPx: 3, saturation: .83, contrast: .88 };
   const backgroundLayer = document.createElement('canvas');
   const backgroundCtx = backgroundLayer.getContext('2d');
+  const backgroundCache = document.createElement('canvas');
+  const backgroundCacheCtx = backgroundCache.getContext('2d');
+  let backgroundCacheKey = '', backgroundPeriod = 0, backgroundPeriodPixels = 0;
+  const MAX_FRAME_DELTA = .1;
   const characterPath = n => `assets/characters/${n === 1 ? '캐릭어' : '캐릭터'}이미지${n}.png`;
   const CHARACTER_POSES = { run:[1,2,3,4,5,9], jumpUp:8, jumpDown:1, hurt:5, over:2 };
   const SMASH_SECONDS = .6;
@@ -55,7 +59,27 @@
   let currentStage = 0;
   let nextBrushAt = 14, nextGiantAt = 24;
   let giantExitReadyAt = 0;
-  let obstacleChoices = { single:0, double:0 };
+  let obstacleChoices = { single:-1, double:-1 };
+  let randomState = 1, previousRecipe = '';
+  const hudCache = Object.create(null);
+  const collectibleCache = new Map();
+  let collectibleScale = 0;
+  function resetRandom(seed) {
+    randomState = seed ?? (globalThis.crypto?.getRandomValues ? crypto.getRandomValues(new Uint32Array(1))[0] : (Date.now() ^ Math.random()*0xffffffff));
+    randomState >>>= 0; previousRecipe = '';
+  }
+  function random() {
+    let n = randomState += 0x6D2B79F5;
+    n = Math.imul(n ^ n >>> 15, n | 1); n ^= n + Math.imul(n ^ n >>> 7, n | 61);
+    return ((n ^ n >>> 14) >>> 0) / 4294967296;
+  }
+  const between = (a,b) => a + random()*(b-a);
+  const choose = values => values[Math.floor(random()*values.length)];
+  function chooseRecipe(level) {
+    const options = level.recipes.filter(r=>r.join(',')!==previousRecipe);
+    const recipe = choose(options.length?options:level.recipes);
+    previousRecipe = recipe.join(','); return recipe;
+  }
   const obstaclePaths = OBSTACLES.map(o => o.path);
   const paths = [...Object.values(asset).flat(), ...obstaclePaths];
   const pauseIcons = { running:'assets/ui/기타이미지15.png', paused:'assets/ui/멈춤버튼.png' };
@@ -78,7 +102,11 @@
     const t = c.getContext('2d');
     t.drawImage(img, 0, 0);
     const pixels = t.getImageData(0, 0, c.width, c.height).data;
-    if (obstaclePaths.includes(path)) masks[path] = { data: pixels, width: c.width, height: c.height };
+    if (obstaclePaths.includes(path)) {
+      const stride=c.width+1, integral=new Uint32Array(stride*(c.height+1));
+      for(let y=0;y<c.height;y++){let row=0;for(let x=0;x<c.width;x++){row+=pixels[(y*c.width+x)*4+3]>=96?1:0;integral[(y+1)*stride+x+1]=integral[y*stride+x+1]+row;}}
+      masks[path] = { data:pixels, width:c.width, height:c.height, integral };
+    }
     let left = c.width, top = c.height, right = -1, bottom = -1;
     for (let y = 0; y < c.height; y++) {
       for (let x = 0; x < c.width; x++) {
@@ -124,6 +152,7 @@
       $('asset-warning').hidden = false;
       $('asset-warning').textContent = `불러오지 못한 이미지: ${failed.join(', ')}`;
     }
+    warmCollectibles();
     $('start').disabled = !(images[asset.characters[0]] && images[asset.items[0]] && tiles.length);
   });
 
@@ -132,30 +161,32 @@
     const layout = getComputedStyle(canvas);
     const width = parseFloat(layout.width), height = parseFloat(layout.height);
     if (!width || !height) return;
-    const dpr = Math.min(devicePixelRatio || 1, 2);
+    const dpr = Math.min(devicePixelRatio || 1, 2, Math.sqrt(3000000/(width*height)));
     worldWidth = H * width / height;
     player.x = Math.min(106, Math.max(16, 16+(worldWidth-320)*.18));
     // Keep a visible approach window on narrow phones, even for the scroll.
     viewportSpeedCap = Math.min(MAX_SPEED, Math.max(SPEED*1.25, (worldWidth-(player.x+player.w/2)+46)/(.56+.14)));
-    canvas.width = Math.round(width * dpr); canvas.height = Math.round(height * dpr);
+    const pixelWidth=Math.round(width*dpr),pixelHeight=Math.round(height*dpr);
+    if(canvas.width!==pixelWidth || canvas.height!==pixelHeight){canvas.width=pixelWidth;canvas.height=pixelHeight;backgroundCacheKey='';}
     canvasPixelRatio = canvas.width / width;
+    if(loaded)warmCollectibles();
   }
   addEventListener('resize', resize);
   if (typeof ResizeObserver !== 'undefined') new ResizeObserver(resize).observe(canvas);
   resize();
 
   function hud() {
-    $('score').textContent = score.toLocaleString('ko-KR');
-    $('health').textContent = `${health} / 3`;
-    $('health').setAttribute('aria-label', `체력 ${health} / 3`);
-    $('health-fill').style.width = `${health / 3 * 100}%`;
-    $('distance').textContent = `${Math.floor(distance)} m`;
-    $('boost').hidden = boostRemaining <= 0;
-    $('boost-time').textContent = `${Math.ceil(boostRemaining)}초`;
-    $('boost').setAttribute('aria-label', `가속 남은 시간 ${Math.ceil(boostRemaining)}초`);
-    $('giant').hidden = giantRemaining <= 0;
-    $('giant-time').textContent = `${Math.ceil(giantRemaining)}초`;
-    $('giant').setAttribute('aria-label', `거대화 남은 시간 ${Math.ceil(giantRemaining)}초`);
+    const text=(id,value)=>{if(hudCache[id]!==value){$(id).textContent=value;hudCache[id]=value;}};
+    if(hudCache.scoreValue!==score){text('score',score.toLocaleString('ko-KR'));hudCache.scoreValue=score;}
+    text('health',`${health} / 3`);
+    if(hudCache.hp!==health){$('health').setAttribute('aria-label',`체력 ${health} / 3`);$('health-fill').style.width=`${health/3*100}%`;hudCache.hp=health;}
+    text('distance',`${Math.floor(distance)} m`);
+    for(const [id,remaining,label]of [['boost',boostRemaining,'가속'],['giant',giantRemaining,'거대화']]){
+      const seconds=Math.ceil(remaining),visible=remaining>0;
+      if(hudCache[id+'Visible']!==visible){$(id).hidden=!visible;hudCache[id+'Visible']=visible;}
+      text(id+'-time',`${seconds}초`);
+      if(hudCache[id+'Aria']!==seconds){$(id).setAttribute('aria-label',`${label} 남은 시간 ${seconds}초`);hudCache[id+'Aria']=seconds;}
+    }
   }
   function syncPauseIcon() {
     const src = mode === 'paused' && pausedIconReady ? pauseIcons.paused : pauseIcons.running;
@@ -173,13 +204,15 @@
     spawnIn = .25; patternIndex = 0; invincible = 0; boostRemaining = 0; giantRemaining = 0; visualScale = 1; orangeSequence = 0;
     objects = []; effects = [];
     flyingObstacles = []; giantIntroRemaining = 0; lastGiantStep = -1;
-    currentStage = 0; nextBrushAt = 14; nextGiantAt = 24; giantExitReadyAt = 0; obstacleChoices = {single:0,double:0};
+    resetRandom(); last=0;
+    currentStage=0; nextBrushAt=between(14,22); nextGiantAt=between(24,36); giantExitReadyAt=0; obstacleChoices={single:-1,double:-1};
     Object.assign(player, { y: GROUND - player.h, vy: 0, grounded: true, land: 0, jumps: 0 });
     mode = 'running'; panel(null); canvas.focus({preventScroll:true}); $('pause').disabled = false;
     $('pause').setAttribute('aria-label', '일시 정지');
     hud(); $('status').textContent = '달리기 시작. 체력 3.';
   }
   function pause() {
+    last=0;
     if (mode === 'running') {
       mode = 'paused'; panel('paused'); $('pause').setAttribute('aria-label', '이어하기');
     } else if (mode === 'paused') {
@@ -246,75 +279,90 @@
     }
     return (low+high)/2;
   }
-  function landingGap(previous, next, level) {
+  function landingGap(previous, next, level, reserveBoost = false) {
     const flight=previous.kind==='double'?DOUBLE_FLIGHT:SINGLE_FLIGHT;
     const minSpeed=Math.min(viewportSpeedCap,SPEED*difficultySpeed());
     const approach=Math.max(0,(previous.center??worldWidth+60)-(player.x+player.w/2))/minSpeed;
     const horizon=approach+flight+level.recovery+next.lead+.15;
     // Uncollected brushes can change speed before this group arrives. New brushes
     // are only placed in the rest area after a group's final obstacle.
-    const mayBoost=boostRemaining>0 || objects.some(o=>o.type==='brush'&&!o.hit);
+    const mayBoost=reserveBoost || boostRemaining>0 || objects.some(o=>o.type==='brush'&&!o.hit);
     const maxSpeed=Math.min(viewportSpeedCap,SPEED*difficultySpeed(time+horizon)*(mayBoost?BOOST_FACTOR:1));
     return maxSpeed*(flight+level.recovery+next.lead)-minSpeed*previous.lead+SPACING_MARGIN+level.extra;
   }
   function spawn() {
-    const level = difficultyAt();
-    const recipe = level.recipes[patternIndex % level.recipes.length].map(kind=>kind==='double'&&time<10?'single':kind);
+    const level=difficultyAt();
+    const recipe = chooseRecipe(level).map(kind=>kind==='double'&&time<10?'single':kind);
+    // Decide specials before spacing: an in-group brush reserves boosted gaps.
+    const specials=[];
+    if(time>=nextBrushAt && images[asset.brush[0]]){specials.push('brush');nextBrushAt=time+between(36,52);}
+    if(time>=nextGiantAt && images[asset.giant[0]]){specials.push('giant');nextGiantAt=time+between(48,68);}
+    const reserveBoost=specials.includes('brush');
+    const plans=specials.map(type=>({type,mode:choose(recipe.length>1?['arc','gap','run']:['arc','run']),index:Math.floor(random()*recipe.length)}));
+    for(const p of plans)if(p.mode==='gap')p.index=Math.min(p.index,recipe.length-2);
+    // Two specials never share a pickup point.
+    if(plans.length>1 && plans[0].mode===plans[1].mode && plans[0].index===plans[1].index)plans[1].mode='run';
     const baseAnchor=worldWidth+60;
-    let anchor=patternIndex===0 ? Math.min(baseAnchor,player.x+player.w/2+SPEED*2) : baseAnchor;
-    if(giantExitReadyAt>time) anchor=Math.max(anchor,player.x+player.w/2+predictTravel(giantExitReadyAt-time+.56)+80);
-    const nodes=[];
-    for(let i=0;i<recipe.length;i++) {
-      const kind = recipe[i];
-      const lead = kind==='double' ? [.52,.54,.56][(patternIndex+i)%3] : [.33,.36,.39][(patternIndex+i)%3];
-      const node = {kind, lead, center:anchor};
-      if(nodes.length) {
-        const previous = nodes.at(-1);
-        node.center = previous.center+landingGap(previous,node,level);
+    let anchor=patternIndex===0?Math.min(baseAnchor,player.x+player.w/2+SPEED*2):baseAnchor;
+    if(giantExitReadyAt>time)anchor=Math.max(anchor,player.x+player.w/2+predictTravel(giantExitReadyAt-time+.56)+80);
+    const nodes=[],groundSlots=[];
+    for(let i=0;i<recipe.length;i++){
+      const kind=recipe[i],node={kind,lead:choose(kind==='double'?[.52,.54,.56]:[.33,.36,.39]),center:anchor};
+      if(i){const previous=nodes[i-1];node.center=previous.center+landingGap(previous,node,level,reserveBoost)+between(0,32);
+        if(plans.some(p=>p.mode==='gap'&&p.index===i-1)){
+          const flight=previous.kind==='double'?DOUBLE_FLIGHT:SINGLE_FLIGHT;
+          const pickupX=previous.center+MAX_SPEED*(flight-previous.lead+Math.max(.18,level.recovery)+.12)+48;
+          node.center=Math.max(node.center,pickupX+MAX_SPEED*(node.lead+.3)+80);
+          groundSlots[i-1]=pickupX;
+        }
       }
       nodes.push(node);
     }
     const created=[];
-    for(const node of nodes) {
-      if(node.kind==='flat') continue;
-      const variants=OBSTACLES.filter(o=>o.kind===node.kind);
-      const descriptor=variants[obstacleChoices[node.kind]++ % variants.length];
-      if(!descriptor || !images[descriptor.path]) continue;
-      const img=images[descriptor.path], h=descriptor.height, w=h*img.naturalWidth/img.naturalHeight;
-      const obstacle={type:'obstacle',path:descriptor.path,core:descriptor.core,
-        x:node.center-w/2,y:GROUND-h,w,h,hit:false,pattern:node.kind,
-        lead:node.lead,stage:level.index,group:patternIndex,order:created.length};
-      created.push(obstacle); objects.push(obstacle);
+    for(const node of nodes){
+      const variants=OBSTACLES.filter(o=>o.kind===node.kind),indices=variants.map((_,i)=>i).filter(i=>i!==obstacleChoices[node.kind]);
+      const selected=choose(indices.length?indices:[0]);obstacleChoices[node.kind]=selected;
+      const descriptor=variants[selected];if(!descriptor||!images[descriptor.path])continue;
+      const img=images[descriptor.path],h=descriptor.height,w=h*img.naturalWidth/img.naturalHeight;
+      const obstacle={type:'obstacle',path:descriptor.path,core:descriptor.core,x:node.center-w/2,y:GROUND-h,w,h,hit:false,pattern:node.kind,lead:node.lead,stage:level.index,group:patternIndex,order:created.length};
+      created.push(obstacle);objects.push(obstacle);
     }
-    for(const node of nodes) {
-      const reaches=arrivalTime(node.center-(player.x+player.w/2));
-      const jumpAt=Math.max(0,reaches-node.lead);
-      const at=time+jumpAt, boost=Math.max(0,boostRemaining-jumpAt);
-      const approach=predictTravel(node.lead,at,boost);
-      const samples=node.kind==='flat' ? [0,.17,.34,.51,.68,.85] :
-        node.kind==='double' ? [.16,.28,.42,.56,.70,.84] : [.10,.22,.34,.46,.58];
-      for(const t of samples) {
-        const path=asset.items[orangeSequence%asset.items.length]; if(!images[path]) continue;
-        const x=node.kind==='flat' ? node.center+predictTravel(t,at,boost) : node.center+predictTravel(t,at,boost)-approach;
-        const y=node.kind==='flat' ? GROUND-48 : GROUND+jumpOffset(t,node.kind==='double')-player.h/2;
-        const orange={type:'orange',path,x:x-18,y:Math.max(90,Math.min(GROUND-38,y-18)),w:36,h:36,hit:false,phase:orangeSequence*.7,pattern:node.kind};
-        if(created.some(o=>overlap({...orange,y:orange.y-5,h:orange.h+10},o))) continue;
-        objects.push(orange); orangeSequence++;
-      }
+    const pickups=[];
+    const putOrange=(x,y,pattern)=>{
+      const path=asset.items[orangeSequence%asset.items.length];if(!images[path])return;
+      const o={type:'orange',path,x:x-18,y:Math.max(70,Math.min(GROUND-38,y-18)),w:36,h:36,hit:false,phase:orangeSequence*.7,pattern};
+      if(created.some(h=>overlap({...o,y:o.y-5,h:o.h+10},h)))return;
+      pickups.push(o);orangeSequence++;
+    };
+    for(const node of nodes){
+      const roll=random(),count=roll<.16?0:roll<.34?1:3+Math.floor(random()*5);
+      const reaches=arrivalTime(node.center-(player.x+player.w/2)),jumpAt=Math.max(0,reaches-node.lead),at=time+jumpAt,boost=Math.max(0,boostRemaining-jumpAt),approach=predictTravel(node.lead,at,boost);
+      const tail=random()<.35,flight=node.kind==='double'?DOUBLE_FLIGHT:SINGLE_FLIGHT;
+      // Orange-only descent/ground ribbons use the existing landing interval;
+      // they do not replace obstacle groups or slow the difficulty progression.
+      const range=tail?[flight-.22,flight+.07]:node.kind==='double'?[.14,.87]:[.10,.59];
+      for(let i=0;i<count;i++){const t=count===1?(tail?flight:node.lead):range[0]+(range[1]-range[0])*i/(count-1);putOrange(node.center+predictTravel(t,at,boost)-approach,GROUND+Math.min(0,jumpOffset(t,node.kind==='double'))-player.h/2,tail?'run':node.kind);}
     }
     const lastNode=nodes.at(-1);
-    let after=lastNode.kind==='flat' ? 1000+level.extra : landingGap(lastNode,{lead:.56},level);
-    const specials=[];
-    if(time>=nextBrushAt && images[asset.brush[0]]) {specials.push('brush'); nextBrushAt=time+36;}
-    if(time>=nextGiantAt && images[asset.giant[0]]) {specials.push('giant'); nextGiantAt=time+48;}
-    if(specials.length) {
-      // Ground-level item rest area after landing, before any next jump begins.
-      const flight=lastNode.kind==='double'?DOUBLE_FLIGHT:SINGLE_FLIGHT;
-      const rest=lastNode.kind==='flat'?330:MAX_SPEED*(flight+level.recovery)-SPEED*lastNode.lead+48;
-      specials.forEach((type,i)=>objects.push({type,path:asset[type][0],x:lastNode.center+rest+i*100-20,
-        y:GROUND-80,w:type==='giant'?40:38,h:46,hit:false,phase:0}));
-      after=Math.max(after,rest+specials.length*100+MAX_SPEED*.85);
+    let after=landingGap(lastNode,{lead:.56},level,reserveBoost)+between(0,32),runIndex=0;
+    for(const plan of plans){
+      const node=nodes[plan.index];let x,y;
+      if(plan.mode==='arc'){
+        x=node.center;y=GROUND+jumpOffset(node.lead,node.kind==='double')-player.h*.5;
+        // Ensure a book/brush can be nestled in a coin trail, not isolated by design.
+        if(random()<.7){const at=time+Math.max(0,arrivalTime(x-player.x-player.w/2)-node.lead);for(const t of [Math.max(.08,node.lead-.16),node.lead+.16])putOrange(x+predictTravel(t,at)-predictTravel(node.lead,at),GROUND+jumpOffset(t,node.kind==='double')-player.h/2,node.kind);}
+      }else{
+        if(plan.mode==='gap')x=groundSlots[plan.index];
+        else{const flight=lastNode.kind==='double'?DOUBLE_FLIGHT:SINGLE_FLIGHT;x=lastNode.center+MAX_SPEED*(flight-lastNode.lead+Math.max(.18,level.recovery)+.16)+80+runIndex++*120;}
+        y=GROUND-58;
+        if(random()<.8)for(const dx of [-96,-48,48,96])putOrange(x+dx,GROUND-48,'flat');
+        after=Math.max(after,x-lastNode.center+MAX_SPEED*(.56+.35)+120);
+      }
+      const o={type:plan.type,path:asset[plan.type][0],x:x-20,y:y-23,w:40,h:46,hit:false,phase:0,placement:plan.mode,group:patternIndex};
+      for(let i=pickups.length-1;i>=0;i--)if(overlap({...o,x:o.x-12,w:o.w+24},pickups[i]))pickups.splice(i,1);
+      pickups.push(o);
     }
+    objects.push(...pickups);
     patternIndex++;
     spawnIn=(lastNode.center-anchor+after+Math.max(0,anchor-baseAnchor))/SPEED;
   }
@@ -344,6 +392,7 @@
     const x1 = Math.min(mask.width-1, Math.ceil((Math.min(box.x+box.w,h.x+h.w)-r.x)/r.w*mask.width));
     const y0 = Math.max(0, Math.floor((Math.max(box.y,h.y)-r.y)/r.h*mask.height));
     const y1 = Math.min(mask.height-1, Math.ceil((Math.min(box.y+box.h,h.y+h.h)-r.y)/r.h*mask.height));
+    if(mask.integral){const stride=mask.width+1,p=mask.integral;return p[(y1+1)*stride+x1+1]-p[y0*stride+x1+1]-p[(y1+1)*stride+x0]+p[y0*stride+x0]>0;}
     for(let y=y0;y<=y1;y++) for(let x=x0;x<=x1;x++) if(mask.data[(y*mask.width+x)*4+3]>=96) return true;
     return false;
   }
@@ -429,7 +478,7 @@
     for (const o of objects) o.x -= SPEED * runDt;
     // Resolve pickups first: a book collected on the same step grants immunity immediately.
     for (const o of objects) {
-      if (o.type==='obstacle' || o.hit || !collides(pickupBox,o)) continue;
+      if (o.type==='obstacle' || o.hit || o.x>pickupBox.x+pickupBox.w+12 || o.x+o.w<pickupBox.x-12 || !collides(pickupBox,o)) continue;
       if (o.type==='orange') {
         o.hit=true; score+=100; collectEffect(100);
       } else if(o.type==='brush') {
@@ -444,7 +493,7 @@
     if(giantWasActive && giantRemaining===0) secureGiantExit();
     const giantBox=giantRemaining>0?destructionBox():null;
     for (const o of objects) {
-      if (o.type!=='obstacle' || (o.hit && giantRemaining<=0) || o.destroyed || !collides(giantBox||damageBox,o)) continue;
+      if (o.type!=='obstacle' || o.x>(giantBox||damageBox).x+(giantBox||damageBox).w+12 || o.x+o.w<(giantBox||damageBox).x-12 || (o.hit && giantRemaining<=0) || o.destroyed || !collides(giantBox||damageBox,o)) continue;
       if (giantRemaining>0) {
         smashObstacle(o);
       } else if(invincible<=0) {
@@ -486,62 +535,66 @@
     ctx.restore();
   }
   function background() {
-    ctx.filter = 'none';
-    if (!tiles.length) {
-      ctx.fillStyle = '#d9ecfa'; ctx.fillRect(0, 0, worldWidth, H);
-      return;
+    ctx.filter='none';
+    if(!tiles.length){ctx.fillStyle='#d9ecfa';ctx.fillRect(0,0,worldWidth,H);return;}
+    const scaleX=canvas.width/worldWidth,scaleY=canvas.height/H;
+    const key=[canvas.height,scaleX,canvasPixelRatio,BACKGROUND_STYLE.blurPx,BACKGROUND_STYLE.saturation,BACKGROUND_STYLE.contrast,...tiles.map(t=>t.path)].join('|');
+    if(key!==backgroundCacheKey){
+      const blur=Math.max(0,BACKGROUND_STYLE.blurPx)*canvasPixelRatio,padding=Math.ceil(blur*4)+2;
+      backgroundPeriod=tiles.reduce((sum,t)=>sum+t.width,0);backgroundPeriodPixels=backgroundPeriod*scaleX;
+      const width=Math.ceil(backgroundPeriodPixels),height=canvas.height;
+      backgroundLayer.width=width+padding*2;backgroundLayer.height=height+padding*2;
+      backgroundCtx.filter='none';backgroundCtx.fillStyle='#d9ecfa';backgroundCtx.fillRect(0,0,backgroundLayer.width,backgroundLayer.height);
+      backgroundCtx.setTransform(scaleX,0,0,scaleY,padding,padding);
+      backgroundCtx.imageSmoothingEnabled=true;backgroundCtx.imageSmoothingQuality='high';
+      const padX=padding/scaleX,padY=padding/scaleY;
+      for(let cycle=-1;cycle<=1;cycle++){let x=cycle*backgroundPeriod;for(const tile of tiles){
+        if(x<backgroundPeriod+padX&&x+tile.width>-padX){const im=tile.image;backgroundCtx.drawImage(im,x,0,tile.width,H);backgroundCtx.drawImage(im,0,0,im.naturalWidth,1,x,-padY,tile.width,padY);backgroundCtx.drawImage(im,0,im.naturalHeight-1,im.naturalWidth,1,x,H,tile.width,padY);}x+=tile.width;
+      }}
+      // Two physical guard pixels retain periodic neighbors during bilinear sampling.
+      backgroundCache.width=width+4;backgroundCache.height=height;
+      try{backgroundCacheCtx.filter=`blur(${blur}px) saturate(${BACKGROUND_STYLE.saturation}) contrast(${BACKGROUND_STYLE.contrast})`;backgroundCacheCtx.drawImage(backgroundLayer,-padding+2,-padding);}
+      finally{backgroundCacheCtx.filter='none';}
+      backgroundCacheKey=key;
     }
-    const pixelRatio = canvasPixelRatio;
-    const blur = Math.max(0, BACKGROUND_STYLE.blurPx) * pixelRatio;
-    const padding = Math.ceil(blur * 4) + 2;
-    const layerWidth = canvas.width + padding * 2;
-    const layerHeight = canvas.height + padding * 2;
-    if (backgroundLayer.width !== layerWidth || backgroundLayer.height !== layerHeight) {
-      backgroundLayer.width = layerWidth; backgroundLayer.height = layerHeight;
-    }
-    const scaleX = canvas.width / worldWidth, scaleY = canvas.height / H;
-    const padX = padding / scaleX, padY = padding / scaleY;
-    backgroundCtx.setTransform(1, 0, 0, 1, 0, 0);
-    backgroundCtx.filter = 'none';
-    backgroundCtx.fillStyle = '#d9ecfa'; backgroundCtx.fillRect(0, 0, layerWidth, layerHeight);
-    backgroundCtx.setTransform(scaleX, 0, 0, scaleY, padding, padding);
-    backgroundCtx.imageSmoothingEnabled = true; backgroundCtx.imageSmoothingQuality = 'high';
-    const total = tiles.reduce((sum, t) => sum + t.width, 0);
-    const offset = (distance * 20 * .65) % total;
-    for (let cycle = -1; cycle <= 1; cycle++) {
-      let x = cycle * total - offset;
-      for (const tile of tiles) {
-        if (x < worldWidth + padX && x + tile.width > -padX) {
-          backgroundCtx.drawImage(tile.image, x, 0, tile.width, H);
-          // Extend only offscreen edge pixels into the blur's sampling margin.
-          // The entire visible source keeps its exact aspect ratio and composition.
-          const img = tile.image;
-          backgroundCtx.drawImage(img, 0, 0, img.naturalWidth, 1, x, -padY, tile.width, padY);
-          backgroundCtx.drawImage(img, 0, img.naturalHeight - 1, img.naturalWidth, 1, x, H, tile.width, padY);
-        }
-        x += tile.width;
-      }
-    }
-    // Filter the already-joined background once, avoiding transparent blur seams
-    // between individual tiles. Never filter the canvas element or foreground.
-    ctx.save();
-    try {
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.filter = `blur(${blur}px) saturate(${BACKGROUND_STYLE.saturation}) contrast(${BACKGROUND_STYLE.contrast})`;
-      ctx.drawImage(backgroundLayer, -padding, -padding);
-    } finally {
-      ctx.restore();
-      ctx.filter = 'none';
-    }
+    // Reuse the filtered period at fractional scroll coordinates; no per-frame blur.
+    const offset=((distance*20*.65)%backgroundPeriod+backgroundPeriod)%backgroundPeriod,guard=2/scaleX;
+    for(let x=-offset;x<worldWidth;x+=backgroundPeriod)ctx.drawImage(backgroundCache,0,0,backgroundPeriodPixels+4,backgroundCache.height,x-guard,0,backgroundPeriod+guard*2,H);
+    ctx.filter='none';
   }
+
   function sparkle(x, y, size, alpha) {
     ctx.save(); ctx.globalAlpha = alpha; ctx.strokeStyle = '#fff5c3'; ctx.lineWidth = 1.5; ctx.lineCap = 'round';
     ctx.beginPath(); ctx.moveTo(x - size, y); ctx.lineTo(x + size, y);
     ctx.moveTo(x, y - size); ctx.lineTo(x, y + size); ctx.stroke(); ctx.restore();
   }
+  function cachedCollectible(o) {
+    const silhouette=silhouettes[o.path],img=images[o.path];
+    if(!silhouette||!img)return null;
+    const scale=canvas.width/worldWidth;
+    if(scale!==collectibleScale){collectibleCache.clear();collectibleScale=scale;}
+    const key=o.path+'|'+o.w+'|'+o.h;
+    if(collectibleCache.has(key))return collectibleCache.get(key);
+    const pad=3,c=document.createElement('canvas');c.width=Math.ceil((o.w+pad*2)*scale);c.height=Math.ceil((o.h+pad*2)*scale);
+    const t=c.getContext('2d');t.setTransform(scale,0,0,scale,pad*scale,pad*scale);t.imageSmoothingQuality='high';
+    const r=spriteRect({...o,x:0,y:0,phase:-time*3});
+    for(const[dx,dy]of [[-1.25,0],[1.25,0],[0,-1.25],[0,1.25],[-.9,-.9],[.9,.9]])t.drawImage(silhouette,r.x+dx,r.y+dy,r.w,r.h);
+    t.drawImage(img,r.x,r.y,r.w,r.h);
+    const cached={canvas:c,pad,w:c.width/scale,h:c.height/scale};collectibleCache.set(key,cached);return cached;
+  }
+  function warmCollectibles() {
+    for(const path of asset.items)cachedCollectible({type:'orange',path,w:36,h:36});
+    for(const type of ['brush','giant'])cachedCollectible({type,path:asset[type][0],w:40,h:46});
+  }
   function drawObject(o) {
+    if(o.x>worldWidth+32 || o.x+o.w<-32)return;
     const r = spriteRect(o);
     if (o.type === 'orange' || o.type === 'brush' || o.type === 'giant') {
+      const cached=cachedCollectible(o);
+      if(cached){
+        const bob=o.type==='orange'?Math.sin(time*3+o.phase)*3:0;
+        ctx.drawImage(cached.canvas,o.x-cached.pad,o.y+bob-cached.pad,cached.w,cached.h);
+      }else{
       const silhouette = silhouettes[o.path];
       if (silhouette) {
         for (const [dx, dy] of [[-1.25, 0], [1.25, 0], [0, -1.25], [0, 1.25], [-.9, -.9], [.9, .9]]) {
@@ -552,6 +605,7 @@
         ctx.save();
         if (!silhouette) { ctx.shadowColor = '#fff4d9'; ctx.shadowBlur = 3; }
         ctx.drawImage(images[o.path], r.x, r.y, r.w, r.h); ctx.restore();
+      }
       }
       if (o.type === 'orange') sparkle(r.x + r.w + 2, r.y + 4, 2, .4);
     } else if (o.type === 'obstacle') {
@@ -650,8 +704,9 @@
     }
   }
   function frame(now) {
-    const dt = Math.max(0, (now - last) / 1000 || 0); last = now;
-    if (mode === 'running') update(dt);
+    const dt=last?Math.max(0,(now-last)/1000):0;last=now;
+    // A long stall is a pause, never a giant catch-up jump or a dropped collision.
+    if(mode==='running'){if(dt>MAX_FRAME_DELTA+1e-6)pause();else update(Math.min(dt,MAX_FRAME_DELTA));}
     render(); requestAnimationFrame(frame);
   }
  hud();requestAnimationFrame(frame);

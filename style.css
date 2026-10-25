@@ -26,7 +26,7 @@ canvas:focus{outline:none}canvas:focus-visible{outline:2px solid #c9a572;outline
 .result::after{left:32%;top:39%;width:40%;height:25%}
 .result-legacy-button-cover{left:25%;top:70%;width:55%;height:21%}
 .result-title,.result-caption,#final-score{position:absolute;z-index:2;left:10%;width:80%;margin:0;padding:0;display:flex;align-items:center;justify-content:center;text-align:center;white-space:nowrap;background:#fff1d2;color:#745439;font-family:inherit;font-weight:400;letter-spacing:0;line-height:1;box-sizing:border-box}
-.result-title{left:37%;width:55%;top:10%;height:24%;font-size:7.78cqw;color:#438abb}
+.result-title{left:37%;width:55%;top:10%;height:24%;font-size:7cqw;color:#438abb}
 .result-caption{top:37%;height:14%;font-size:7.94cqw}
 #final-score{top:54%;height:16%;font-size:clamp(9px,calc(100cqw / var(--score-chars,2)),12.06cqw);font-weight:700;font-variant-numeric:tabular-nums}
 .result button{position:absolute;z-index:2;left:28.27%;top:72.62%;width:43.46%;height:14.76%;margin:0;padding:0 6px;border:0;border-radius:999px;background:#61a2bf;color:#fff9df;cursor:pointer;display:flex;align-items:center;justify-content:center;font-family:inherit;font-size:6.14cqw;font-weight:400;line-height:1;white-space:nowrap;touch-action:manipulation}

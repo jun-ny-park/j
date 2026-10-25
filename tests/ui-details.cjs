@@ -38,7 +38,7 @@ const close=(a,b,n)=>assert(Math.abs(a-b)<.15,`${n}: ${a} vs ${b}`);
    }
    await page.evaluate(()=>uiDetails.show(43900));const g=await page.evaluate(measure);
    close(g.restart.w/originalResult.restart.w,.82,'retry shrink width');close(g.restart.h/originalResult.restart.h,.82,'retry shrink height');
-   assert(g.restart.font<originalResult.restart.font);assert(g.title.font/originalResult.title.font>=.84&&g.title.font/originalResult.title.font<=.9);
+   assert(g.restart.font<originalResult.restart.font);assert(g.title.font/originalResult.title.font>=.76&&g.title.font/originalResult.title.font<=.81);
    assert(g.title.left>originalResult.title.left);assert(g.title.top<originalResult.title.top);assert(g.caption.top<originalResult.caption.top);
    const hit=await page.evaluate(()=>['restart','resume'].map(id=>{const e=document.getElementById(id),s=getComputedStyle(e,'::after');return{id,width:parseFloat(s.width),height:parseFloat(s.height)};}));for(const h of hit)if(h.id==='restart')assert(h.width>=44&&h.height>=44);
    const expandedHit=await page.evaluate(()=>{const e=document.querySelector('#restart'),r=e.getBoundingClientRect(),rot=Math.abs(new DOMMatrix(getComputedStyle(document.querySelector('main')).transform).b)>.5;const x=r.x+r.width/2+(rot?21:0),y=r.y+r.height/2+(rot?0:21);return{x,y,id:document.elementFromPoint(x,y)?.closest('button')?.id};});assert.equal(expandedHit.id,'restart','transparent touch extension works');
