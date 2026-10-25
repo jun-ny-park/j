@@ -12,5 +12,3 @@ button,kbd{font-family:inherit}button{font-weight:400}.brand{font-weight:400}hea
 .game-footer{justify-content:flex-end}.effect-timers{position:absolute;top:90px;right:20px;display:flex;gap:7px;pointer-events:none}.timer{font-family:inherit;font-size:23px;min-width:50px;padding:5px 10px;text-align:center;border-radius:20px;background:#fff8e9ed}.timer-speed{border:1px solid #7eafd0;color:#4b86b0}.timer-giant{border:3px double #c7a568;color:#9d7137;padding:3px 8px}.paused{gap:12px}.paused h2{margin-bottom:8px}@media(max-width:640px){.effect-timers{top:64px;right:10px}.timer{font-size:20px;min-width:44px;padding:3px 8px}.timer-giant{padding:1px 6px}}
 
 canvas:focus{outline:none}canvas:focus-visible{outline:2px solid #c9a572;outline-offset:-3px}
-
-.difficulty-note{position:absolute;left:20px;top:88px;padding:4px 10px;border-radius:12px;background:#fff8e9c9;color:#9c805c;font-size:17px;pointer-events:none}@media(max-width:640px){.difficulty-note{left:10px;top:66px;max-width:calc(100% - 130px);font-size:15px;line-height:1.25}}

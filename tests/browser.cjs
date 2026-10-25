@@ -17,7 +17,7 @@ window.testGame={
  await page.addInitScript(()=>{window.characterDraws=[];const draw=CanvasRenderingContext2D.prototype.drawImage;CanvasRenderingContext2D.prototype.drawImage=function(im,...args){if(im.src?.includes('/characters/'))window.characterDraws.push(args);return draw.call(this,im,...args);};});
  await page.route('**/game.js',r=>r.fulfill({contentType:'text/javascript',body:source}));await page.clock.install();await page.goto(process.env.GAME_URL||'http://127.0.0.1:8001');await page.waitForFunction(()=>document.querySelector('#loading').textContent.includes('SPACE'));await page.evaluate(()=>document.fonts.ready);
  assert.equal(await page.locator('#paused button').count(),1);assert.equal(await page.locator('#resume').innerText(),'다시 달리기');assert.equal(await page.locator('.effect-timers img').count(),0);
- assert(await page.evaluate(()=>document.fonts.check('20px "Gamja Flower"','시험이 어려워지고 있도다!')));
+ assert(await page.evaluate(()=>document.fonts.check('20px "Gamja Flower"','유생런 다시 달리기 5초')));
  const timers=await page.evaluate(()=>{
   const g=testGame;g.isolated();g.place('brush');g.update(1/120);const brush=g.state();g.place('giant');g.update(1/120);const book=g.state();g.update(.5);const enlarged=g.state();
   g.isolated();g.place('brush');g.update(1/120);g.place('giant');g.update(1/120);
@@ -28,7 +28,7 @@ window.testGame={
  await page.evaluate(()=>{testGame.isolated();testGame.place('giant');testGame.update(1/120);testGame.update(.5);testGame.place('brush');testGame.update(1/120);testGame.render();});
  assert(Math.abs((await page.evaluate(()=>{const r=characterDraws.at(-1);return r[1]+r[3];}))-461)<.001);
  await page.getByRole('button',{name:'일시 정지',exact:true}).click();const before=await page.evaluate(()=>testGame.state());await page.clock.runFor(3000);assert.deepEqual(await page.evaluate(()=>testGame.state()),before);
- await page.screenshot({path:path.join(output,'difficulty-pause.png')});await page.locator('#resume').click();assert.equal(await page.evaluate(()=>testGame.state().giantRemaining),before.giantRemaining);
+ await page.screenshot({path:path.join(output,'difficulty-pause.png')});const resumed=await page.evaluate(()=>{document.querySelector('#resume').click();return testGame.state();});assert.equal(resumed.giantRemaining,before.giantRemaining);await page.clock.runFor(100);assert((await page.evaluate(()=>testGame.state().giantRemaining))<resumed.giantRemaining);
  await page.evaluate(()=>testGame.isolated());await page.keyboard.press('Space');await page.clock.runFor(120);await page.keyboard.press('Space');await page.clock.runFor(120);assert.equal(await page.evaluate(()=>testGame.state().player.jumps),2);await page.keyboard.press('Space');assert.equal(await page.evaluate(()=>testGame.state().player.jumps),2);
  await page.evaluate(()=>{testGame.isolated();for(let i=0;i<6;i++){testGame.orange(i);testGame.update(.01);}for(let i=0;i<3;i++){testGame.collision();testGame.update(.01);}});
  assert.equal(await page.locator('#final-score').innerText(),'600');assert(await page.locator('#result').isVisible());await page.locator('#restart').click();assert.equal(await page.locator('#score').innerText(),'0');assert.match(await page.locator('#health').innerText(),/3 \/ 3/);

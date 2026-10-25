@@ -3,7 +3,7 @@ const {chromium}=require('playwright');
 const source=fs.readFileSync(path.resolve(__dirname,'../game.js'),'utf8').replace(' hud();requestAnimationFrame(frame);',`
 window.difficultyTest={
  state:()=>({mode,time,stage:difficultyAt().index,speed:SPEED*movementFactor(),target:difficultyAt().speed,
- boostRemaining,giantRemaining,visualScale,notice:stageNoticeRemaining,player:{...player},
+ boostRemaining,giantRemaining,visualScale,player:{...player},
  objects:objects.map(o=>({...o})),worldWidth,cap:viewportSpeedCap,patternIndex,nextBrushAt,nextGiantAt,score,health}),
  stageAt:t=>difficultyAt(t),speedAt:t=>difficultySpeed(t),predictTravel,update,jump,pause,start,render,
  isolated:(at,b=0,g=0)=>{start();time=at;currentStage=difficultyAt().index;objects=[];spawnIn=1e6;boostRemaining=b;giantRemaining=g;},
@@ -62,7 +62,7 @@ window.difficultyTest={
   assert(routes.filter(r=>r.stage===0).every(r=>r.paths.every(p=>/기타이미지[12]\.png$/.test(p))));
   const rare=await page.evaluate(()=>difficultyTest.rareSeries());for(const type of ['brush','giant']){const events=rare.filter(e=>e.type===type);for(let i=1;i<events.length;i++)assert(events[i].t-events[i-1].t>=(type==='brush'?36:28));}
   const pause=await page.evaluate(()=>{const g=difficultyTest;g.isolated(19.99,5,5);g.pause();const before=g.state();g.update(50);const after=g.state();g.pause();g.update(.02);const resumed=g.state();g.update(1.01);const faded=g.state();g.update(5.1);for(let i=0;i<3;i++){g.collision();g.update(.01);}const over=g.state();g.start();return {before,after,resumed,faded,over,reset:g.state()};});
-  assert.deepEqual(pause.before,pause.after);assert.equal(pause.resumed.stage,1);assert(pause.resumed.notice>0);assert.equal(pause.faded.notice,0);assert.equal(pause.reset.stage,0);assert.equal(pause.reset.time,0);assert.equal(pause.reset.boostRemaining,0);assert.equal(pause.reset.giantRemaining,0);assert.equal(pause.over.mode,'over');
+  assert.deepEqual(pause.before,pause.after);assert.equal(pause.resumed.stage,1);assert.equal(await page.locator('#difficulty-note').count(),0);assert.equal(pause.reset.stage,0);assert.equal(pause.reset.time,0);assert.equal(pause.reset.boostRemaining,0);assert.equal(pause.reset.giantRemaining,0);assert.equal(pause.over.mode,'over');
   const caps=[];for(const width of [320,390,1280]){await page.setViewportSize({width,height:900});await page.waitForFunction(()=>{const r=document.querySelector('canvas').getBoundingClientRect();return Math.abs(r.width/difficultyTest.state().worldWidth-r.height/500)<.001;});const cap=await page.evaluate(()=>{difficultyTest.isolated(120,5);return difficultyTest.state();});assert(cap.speed<=587.52+1e-6);assert(cap.cap>=306*1.28);caps.push({width,cap:cap.cap,speed:cap.speed});}
   const continuous=[];
   for(const width of [1280,390,320]){

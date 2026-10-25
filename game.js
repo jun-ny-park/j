@@ -51,7 +51,7 @@
   let worldWidth = 1100, tiles = [], patternIndex = 0;
   let canvasPixelRatio = 1, viewportSpeedCap = MAX_SPEED;
   let flyingObstacles = [], giantIntroRemaining = 0, lastGiantStep = -1;
-  let currentStage = 0, stageNoticeRemaining = 0;
+  let currentStage = 0;
   let nextBrushAt = 14, nextGiantAt = 6;
   let obstacleChoices = { single:0, double:0 };
   const obstaclePaths = OBSTACLES.map(o => o.path);
@@ -76,6 +76,7 @@
       x: left / c.width, y: top / c.height,
       w: (right - left + 1) / c.width, h: (bottom - top + 1) / c.height
     };
+    if (asset.characters.includes(path)) return;
     // Runtime-only silhouette; original PNG files stay unchanged.
     t.globalCompositeOperation = 'source-in';
     t.fillStyle = '#fff4d9'; t.fillRect(0, 0, c.width, c.height);
@@ -86,7 +87,7 @@
     const img = new Image();
     img.onload = () => {
       images[path] = img;
-      if (asset.items.includes(path) || asset.brush.includes(path) || asset.giant.includes(path) || obstaclePaths.includes(path)) {
+      if (asset.characters.includes(path) || asset.items.includes(path) || asset.brush.includes(path) || asset.giant.includes(path) || obstaclePaths.includes(path)) {
         try { prepareSprite(path, img); } catch (error) {
           // Some browsers restrict local file pixel reads. Keep the image playable.
           console.warn(`투명도 분석을 생략합니다: ${path}`, error.name);
@@ -128,7 +129,6 @@
     $('health').setAttribute('aria-label', `체력 ${health} / 3`);
     $('health-fill').style.width = `${health / 3 * 100}%`;
     $('distance').textContent = `${Math.floor(distance)} m`;
-    $('difficulty-note').hidden = stageNoticeRemaining <= 0;
     $('boost').hidden = boostRemaining <= 0;
     $('boost-time').textContent = `${Math.ceil(boostRemaining)}초`;
     $('boost').setAttribute('aria-label', `가속 남은 시간 ${Math.ceil(boostRemaining)}초`);
@@ -146,7 +146,7 @@
     spawnIn = .5; patternIndex = 0; invincible = 0; boostRemaining = 0; giantRemaining = 0; visualScale = 1; orangeSequence = 0;
     objects = []; effects = [];
     flyingObstacles = []; giantIntroRemaining = 0; lastGiantStep = -1;
-    currentStage = 0; stageNoticeRemaining = 0; nextBrushAt = 14; nextGiantAt = 6; obstacleChoices = {single:0,double:0};
+    currentStage = 0; nextBrushAt = 14; nextGiantAt = 6; obstacleChoices = {single:0,double:0};
     Object.assign(player, { y: GROUND - player.h, vy: 0, grounded: true, land: 0, jumps: 0 });
     mode = 'running'; panel(null); canvas.focus({preventScroll:true}); $('pause').disabled = false;
     $('pause').setAttribute('aria-label', '일시 정지');
@@ -327,7 +327,6 @@
     mode = 'over'; boostRemaining = 0; giantRemaining = 0; visualScale = 1; effects = [];
     flyingObstacles = []; giantIntroRemaining = 0; lastGiantStep = -1;
     $('pause').disabled = true; $('final-score').textContent = score.toLocaleString('ko-KR');
-    stageNoticeRemaining=0;
     panel('result'); $('status').textContent = `게임 오버. 최종 점수 ${score}.`;
     hud();
   }
@@ -356,12 +355,7 @@
     effects = effects.filter(e=>e.life>0);
     giantIntroRemaining = Math.max(0,giantIntroRemaining-realDt);
     time += realDt; runTime += runDt;
-    stageNoticeRemaining=Math.max(0,stageNoticeRemaining-realDt);
-    const stage=difficultyAt().index;
-    if(stage!==currentStage) {
-      currentStage=stage; stageNoticeRemaining=1;
-      $('difficulty-note').textContent='시험이 어려워지고 있도다!';
-    }
+    currentStage=difficultyAt().index;
     invincible = Math.max(0, invincible - realDt); player.land = Math.max(0, player.land - realDt);
     boostRemaining = Math.max(0, boostRemaining - realDt);
     if (boostRemaining < 1e-9) boostRemaining = 0;
@@ -379,11 +373,12 @@
       player.y = GROUND - player.h; player.vy = 0; player.grounded = true; player.jumps = 0;
     }
     spawnIn -= runDt; if (spawnIn <= 0) spawn();
-    const box = { x: player.x + 18, y: player.y + 15, w: player.w - 32, h: player.h - 20 };
+    const damageBox = { x: player.x + 18, y: player.y + 15, w: player.w - 32, h: player.h - 20 };
+    const pickupBox = collectionBox();
     for (const o of objects) o.x -= SPEED * runDt;
     // Resolve pickups first: a book collected on the same step grants immunity immediately.
     for (const o of objects) {
-      if (o.type==='obstacle' || o.hit || !collides(box,o)) continue;
+      if (o.type==='obstacle' || o.hit || !collides(pickupBox,o)) continue;
       if (o.type==='orange') {
         o.hit=true; score+=100; collectEffect(100);
       } else if(o.type==='brush') {
@@ -396,7 +391,7 @@
     }
     const giantBox=giantRemaining>0?destructionBox():null;
     for (const o of objects) {
-      if (o.type!=='obstacle' || (o.hit && giantRemaining<=0) || o.destroyed || !collides(giantBox||box,o)) continue;
+      if (o.type!=='obstacle' || (o.hit && giantRemaining<=0) || o.destroyed || !collides(giantBox||damageBox,o)) continue;
       if (giantRemaining>0) {
         smashObstacle(o);
       } else if(invincible<=0) {
@@ -517,7 +512,8 @@
     if(giantRemaining>0) return giantRemaining<=1 ? .86+.14*Math.cos((1-giantRemaining)*Math.PI*6) : 1;
     return mode==='running' && invincible>0 && Math.floor(invincible*11)%2 ? .45 : 1;
   }
-  function character() {
+  // Drawing and pickup bounds share exactly the same pose, growth, stride and landing scale.
+  function characterGeometry() {
     const phase=stridePhase();
     const pose=mode==='over' ? CHARACTER_POSES.over :
       giantRemaining<=0 && invincible>1.05 ? CHARACTER_POSES.hurt :
@@ -527,15 +523,31 @@
     const intro=giantIntroRemaining>0 ? 1+.05*Math.sin(Math.PI*(1-giantIntroRemaining/.3)) : 1;
     const stride=giantRemaining>0 && player.grounded ? 1+.02*Math.sin(phase*Math.PI/3)**2 : 1;
     const h=player.h*landing*visualScale*intro*stride, w=player.w*landing*visualScale*intro*stride;
+    const preferred=characterPath(pose);
+    const path=images[preferred]?preferred:asset.characters.find(p=>images[p]);
+    if(!path) return null;
+    const img=images[path], fit=Math.min(w/img.naturalWidth,h/img.naturalHeight);
+    const width=img.naturalWidth*fit, height=img.naturalHeight*fit;
+    return {path,x:player.x+(player.w-width)/2,y:player.y+player.h-height,w:width,h:height};
+  }
+  function collectionBox() {
+    const frame=characterGeometry();
+    if(!frame) return {x:player.x,y:player.y,w:player.w,h:player.h};
+    const a=alphaBounds[frame.path]||{x:0,y:0,w:1,h:1};
+    // Friendly antialias margin; never use this larger box for taking obstacle damage.
+    const pad=2;
+    return {x:frame.x+a.x*frame.w-pad,y:frame.y+a.y*frame.h-pad,
+      w:a.w*frame.w+pad*2,h:a.h*frame.h+pad*2};
+  }
+  function character() {
     if(boostRemaining>0) {
       for(let i=0;i<3;i++) {
         const angle=time*4+i*2.1;
         sparkle(player.x-6-i*10,player.y+25+(Math.sin(angle)+1)*24,2.5,.45);
       }
     }
-    const preferred=characterPath(pose);
-    const path=images[preferred]?preferred:asset.characters.find(p=>images[p]);
-    if(path) draw(path,player.x+(player.w-w)/2,player.y+player.h-h,w,h,endingOpacity());
+    const frame=characterGeometry();
+    if(frame) draw(frame.path,frame.x,frame.y,frame.w,frame.h,endingOpacity());
   }
   function drawFlyingObstacles() {
     for(const f of flyingObstacles) {
