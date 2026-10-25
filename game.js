@@ -114,15 +114,21 @@
   });
 
   function resize() {
-    const r = canvas.getBoundingClientRect(), dpr = Math.min(devicePixelRatio || 1, 2);
-    worldWidth = H * r.width / r.height;
+    // Layout dimensions stay in game coordinates when CSS rotates the entire UI.
+    const layout = getComputedStyle(canvas);
+    const width = parseFloat(layout.width), height = parseFloat(layout.height);
+    if (!width || !height) return;
+    const dpr = Math.min(devicePixelRatio || 1, 2);
+    worldWidth = H * width / height;
     player.x = Math.min(106, Math.max(16, 16+(worldWidth-320)*.18));
     // Keep a visible approach window on narrow phones, even for the scroll.
     viewportSpeedCap = Math.max(SPEED*1.55, Math.min(MAX_SPEED, (worldWidth-(player.x+player.w/2)+46)/(.56+.09)));
-    canvas.width = Math.round(r.width * dpr); canvas.height = Math.round(r.height * dpr);
-    canvasPixelRatio = canvas.width / r.width;
+    canvas.width = Math.round(width * dpr); canvas.height = Math.round(height * dpr);
+    canvasPixelRatio = canvas.width / width;
   }
-  addEventListener('resize', resize); resize();
+  addEventListener('resize', resize);
+  if (typeof ResizeObserver !== 'undefined') new ResizeObserver(resize).observe(canvas);
+  resize();
 
   function hud() {
     $('score').textContent = score.toLocaleString('ko-KR');
