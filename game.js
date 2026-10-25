@@ -7,10 +7,12 @@
   const BACKGROUND_STYLE = { blurPx: 1.25, saturation: .94, contrast: .94 };
   const backgroundLayer = document.createElement('canvas');
   const backgroundCtx = backgroundLayer.getContext('2d');
+  const characterPath = n => `assets/characters/${n === 1 ? '캐릭어' : '캐릭터'}이미지${n}.png`;
+  const CHARACTER_POSES = { run:[1,2,3,4,5,9], jumpUp:8, jumpDown:1, hurt:5, over:2 };
+  const SMASH_SECONDS = .6;
   const asset = {
     backgrounds: ['assets/backgrounds/bbaakk1.jpg'],
-    characters: [1, 2, 3, 4, 5, 6, 7, 8, 9].map(n =>
-      `assets/characters/${n === 1 ? '캐릭어' : '캐릭터'}이미지${n}.png`),
+    characters: [1,2,3,4,5,8,9].map(characterPath),
     items: [1, 2, 3, 4, 5, 6].map(n => `assets/items/귤${n}.png`),
     brush: ['assets/extras/기타이미지4.png'],
     giant: ['assets/extras/기타이미지3.png'],
@@ -48,6 +50,7 @@
   let boostRemaining = 0, giantRemaining = 0, visualScale = 1, orangeSequence = 0, objects = [], effects = [], last = 0;
   let worldWidth = 1100, tiles = [], patternIndex = 0;
   let canvasPixelRatio = 1, viewportSpeedCap = MAX_SPEED;
+  let flyingObstacles = [], giantIntroRemaining = 0, lastGiantStep = -1;
   let currentStage = 0, stageNoticeRemaining = 0;
   let nextBrushAt = 14, nextGiantAt = 6;
   let obstacleChoices = { single:0, double:0 };
@@ -142,6 +145,7 @@
     score = 0; health = 3; distance = 0; time = 0; runTime = 0;
     spawnIn = .5; patternIndex = 0; invincible = 0; boostRemaining = 0; giantRemaining = 0; visualScale = 1; orangeSequence = 0;
     objects = []; effects = [];
+    flyingObstacles = []; giantIntroRemaining = 0; lastGiantStep = -1;
     currentStage = 0; stageNoticeRemaining = 0; nextBrushAt = 14; nextGiantAt = 6; obstacleChoices = {single:0,double:0};
     Object.assign(player, { y: GROUND - player.h, vy: 0, grounded: true, land: 0, jumps: 0 });
     mode = 'running'; panel(null); canvas.focus({preventScroll:true}); $('pause').disabled = false;
@@ -321,11 +325,36 @@
   }
   function endGame() {
     mode = 'over'; boostRemaining = 0; giantRemaining = 0; visualScale = 1; effects = [];
+    flyingObstacles = []; giantIntroRemaining = 0; lastGiantStep = -1;
     $('pause').disabled = true; $('final-score').textContent = score.toLocaleString('ko-KR');
+    stageNoticeRemaining=0;
     panel('result'); $('status').textContent = `게임 오버. 최종 점수 ${score}.`;
+    hud();
+  }
+  function stridePhase() {
+    return runTime * 9 * SPEED / 260 * (giantRemaining > 0 ? 1.1 : 1);
+  }
+  function smashObstacle(o) {
+    if (o.destroyed) return;
+    o.hit = true; o.destroyed = true; // Disable collision before starting any animation.
+    flyingObstacles.push({ path:o.path, x:o.x, y:o.y, w:o.w, h:o.h, age:0,
+      duration:SMASH_SECONDS, travel:Math.max(160,worldWidth+o.w+60-o.x) });
+    flyingObstacles = flyingObstacles.slice(-12);
+    if (!effects.some(e=>e.type==='impact' && e.life>.12 && Math.abs(e.x-player.x)<120)) {
+      effects.push({type:'impact',x:player.x+player.w*.8,y:GROUND-20,life:.32});
+    }
+  }
+  function destructionBox() {
+    const size = Math.max(1, visualScale), w=player.w*size, h=player.h*size;
+    return {x:player.x+(player.w-w)/2+8,y:player.y+player.h-h+15,w:w-16,h:h-20};
   }
   function advance(realDt, factor) {
     const runDt = realDt * factor;
+    for (const f of flyingObstacles) f.age += realDt;
+    flyingObstacles = flyingObstacles.filter(f=>f.age<f.duration-1e-9);
+    for (const e of effects) { e.life -= realDt; e.y -= realDt * (e.type==='collect'?22:0); }
+    effects = effects.filter(e=>e.life>0);
+    giantIntroRemaining = Math.max(0,giantIntroRemaining-realDt);
     time += realDt; runTime += runDt;
     stageNoticeRemaining=Math.max(0,stageNoticeRemaining-realDt);
     const stage=difficultyAt().index;
@@ -351,27 +380,42 @@
     }
     spawnIn -= runDt; if (spawnIn <= 0) spawn();
     const box = { x: player.x + 18, y: player.y + 15, w: player.w - 32, h: player.h - 20 };
+    for (const o of objects) o.x -= SPEED * runDt;
+    // Resolve pickups first: a book collected on the same step grants immunity immediately.
     for (const o of objects) {
-      o.x -= SPEED * runDt;
-      if (o.hit || !collides(box, o)) continue;
-      if (o.type === 'orange') {
-        o.hit = true; score += 100; collectEffect(100);
-      } else if (o.type === 'brush') {
-        o.hit = true; boostRemaining = BOOST_SECONDS;
-        $('status').textContent = '붓 획득. 5초 가속!';
-      } else if (o.type === 'giant') {
-        o.hit = true; giantRemaining = GIANT_SECONDS;
-        $('status').textContent = '과거 책 획득. 5초 거대화!';
-      } else if (o.type === 'obstacle' && invincible <= 0) {
-        o.hit = true; health--; invincible = 1.4;
-        $('status').textContent = `장애물 충돌. 체력 ${health}.`;
-        if (health === 0) { endGame(); break; }
+      if (o.type==='obstacle' || o.hit || !collides(box,o)) continue;
+      if (o.type==='orange') {
+        o.hit=true; score+=100; collectEffect(100);
+      } else if(o.type==='brush') {
+        o.hit=true; boostRemaining=BOOST_SECONDS;
+        $('status').textContent='붓 획득. 5초 가속!';
+      } else if(o.type==='giant') {
+        o.hit=true; giantRemaining=GIANT_SECONDS; giantIntroRemaining=.3; invincible=0; lastGiantStep=-1;
+        $('status').textContent='과거 책 획득. 5초 거대화!';
       }
     }
-    objects = objects.filter(o => o.x + o.w > -50 && !(o.hit && o.type !== 'obstacle'));
-    for (const e of effects) { e.life -= realDt; e.y -= realDt * 22; }
-    effects = effects.filter(e => e.life > 0).slice(-4);
+    const giantBox=giantRemaining>0?destructionBox():null;
+    for (const o of objects) {
+      if (o.type!=='obstacle' || (o.hit && giantRemaining<=0) || o.destroyed || !collides(giantBox||box,o)) continue;
+      if (giantRemaining>0) {
+        smashObstacle(o);
+      } else if(invincible<=0) {
+        o.hit=true; health--; invincible=1.4;
+        $('status').textContent=`장애물 충돌. 체력 ${health}.`;
+        if(health===0) { endGame(); break; }
+      }
+    }
+    objects=objects.filter(o=>!o.destroyed && o.x+o.w>-50 && !(o.hit && o.type!=='obstacle'));
+    if(giantRemaining>0 && player.grounded) {
+      const footfall=Math.floor(stridePhase()/3);
+      if(footfall!==lastGiantStep) {
+        lastGiantStep=footfall;
+        effects.push({type:'dust',x:player.x+player.w*.35,y:GROUND-3,life:.22});
+      }
+    } else if(giantRemaining<=0) lastGiantStep=-1;
+    effects=effects.slice(-10);
   }
+
   function update(dt) {
     if (mode !== 'running') return;
     // Real-time boost clock and movement clock are separate. Small steps avoid tunnelling
@@ -469,24 +513,59 @@
       draw(o.path, o.x, o.y, o.w, o.h);
     }
   }
+  function endingOpacity() {
+    if(giantRemaining>0) return giantRemaining<=1 ? .86+.14*Math.cos((1-giantRemaining)*Math.PI*6) : 1;
+    return mode==='running' && invincible>0 && Math.floor(invincible*11)%2 ? .45 : 1;
+  }
   function character() {
-    const index = mode === 'over' ? 6 : invincible > 1.05 ? 5 : !player.grounded ? (player.vy < 0 ? 7 : 0) :
-      [0, 1, 2, 3, 4, 8][Math.floor(runTime * 9 * SPEED / 260) % 6];
-    const scale = player.land > 0 ? 1 - .06 * Math.sin(player.land / .14 * Math.PI) : 1;
-    const h = player.h * scale * visualScale, w = player.w * scale * visualScale;
-    const blink = mode === 'running' && invincible > 0 && Math.floor(invincible * 11) % 2 ? .45 : 1;
-    if (boostRemaining > 0) {
-      for (let i = 0; i < 3; i++) {
-        const phase = time * 4 + i * 2.1;
-        sparkle(player.x - 6 - i * 10, player.y + 25 + (Math.sin(phase) + 1) * 24, 2.5, .45);
+    const phase=stridePhase();
+    const pose=mode==='over' ? CHARACTER_POSES.over :
+      giantRemaining<=0 && invincible>1.05 ? CHARACTER_POSES.hurt :
+      !player.grounded ? (player.vy<0?CHARACTER_POSES.jumpUp:CHARACTER_POSES.jumpDown) :
+      CHARACTER_POSES.run[Math.floor(phase)%CHARACTER_POSES.run.length];
+    const landing=player.land>0 ? 1-.06*Math.sin(player.land/.14*Math.PI) : 1;
+    const intro=giantIntroRemaining>0 ? 1+.05*Math.sin(Math.PI*(1-giantIntroRemaining/.3)) : 1;
+    const stride=giantRemaining>0 && player.grounded ? 1+.02*Math.sin(phase*Math.PI/3)**2 : 1;
+    const h=player.h*landing*visualScale*intro*stride, w=player.w*landing*visualScale*intro*stride;
+    if(boostRemaining>0) {
+      for(let i=0;i<3;i++) {
+        const angle=time*4+i*2.1;
+        sparkle(player.x-6-i*10,player.y+25+(Math.sin(angle)+1)*24,2.5,.45);
       }
     }
-    draw(asset.characters[index], player.x + (player.w - w) / 2, player.y + player.h - h, w, h, blink);
+    const preferred=characterPath(pose);
+    const path=images[preferred]?preferred:asset.characters.find(p=>images[p]);
+    if(path) draw(path,player.x+(player.w-w)/2,player.y+player.h-h,w,h,endingOpacity());
+  }
+  function drawFlyingObstacles() {
+    for(const f of flyingObstacles) {
+      const p=Math.min(1,f.age/f.duration), ease=1-(1-p)**3;
+      const size=1-.52*p, alpha=(1-p)**.7;
+      const x=f.x+f.w/2+f.travel*ease, y=f.y+f.h/2-210*Math.sin(p*Math.PI/2)-60*p;
+      ctx.save();ctx.translate(x,y);ctx.rotate(.32*ease);
+      draw(f.path,-f.w*size/2,-f.h*size/2,f.w*size,f.h*size,alpha);ctx.restore();
+    }
+  }
+  function dustEffect(e) {
+    const duration=e.type==='impact'?.32:.22,p=1-e.life/duration;
+    ctx.save();ctx.fillStyle='#ddc9a5';ctx.globalAlpha=(1-p)*.4;
+    for(let i=0;i<3;i++) {
+      const spread=(i-1)*(6+p*13),radius=3+p*5;
+      ctx.beginPath();ctx.ellipse(e.x+spread,e.y-p*8-(i%2)*3,radius,radius*.65,0,0,Math.PI*2);ctx.fill();
+    }
+    ctx.restore();
+    if(e.type==='impact') for(let i=0;i<2;i++) {
+      const x=e.x+12+i*16+p*18, y=e.y-20-i*12-p*20, r=4+p*2;
+      ctx.save();ctx.globalAlpha=1-p;ctx.fillStyle='#fff0b8';ctx.strokeStyle='#c8a36a';ctx.lineWidth=.7;ctx.beginPath();
+      for(let j=0;j<10;j++) {const angle=-Math.PI/2+j*Math.PI/5,rad=j%2?r*.45:r;const px=x+Math.cos(angle)*rad,py=y+Math.sin(angle)*rad;j?ctx.lineTo(px,py):ctx.moveTo(px,py);}
+      ctx.closePath();ctx.fill();ctx.stroke();ctx.restore();
+    }
   }
   function render() {
     ctx.setTransform(canvas.width / worldWidth, 0, 0, canvas.height / H, 0, 0);
     ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high'; background();
     for (const o of objects) if (o.type === 'obstacle') drawObject(o);
+    drawFlyingObstacles();
     character();
     // Collectibles always render in the foreground, after background and hazards.
     for (const o of objects) if (o.type !== 'obstacle') drawObject(o);
@@ -494,6 +573,8 @@
       if (e.type === 'collect') {
         ctx.save(); ctx.globalAlpha = Math.min(1, e.life / .12); ctx.fillStyle = '#805232';
         ctx.font = '22px "Gamja Flower", cursive'; ctx.fillText(`+${e.amount}`, e.x, e.y); ctx.restore();
+      } else if (e.type==='dust' || e.type==='impact') {
+        dustEffect(e);
       } else if (e.type === 'double') {
         const progress = 1 - e.life / .3;
         for (let i = 0; i < 5; i++) {

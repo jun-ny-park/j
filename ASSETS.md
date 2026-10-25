@@ -23,8 +23,8 @@
 | `assets/characters/캐릭터이미지3.png` | 97×127 | 캐릭터 동작 |
 | `assets/characters/캐릭터이미지4.png` | 89×124 | 캐릭터 동작 |
 | `assets/characters/캐릭터이미지5.png` | 92×122 | 캐릭터 동작 |
-| `assets/characters/캐릭터이미지6.png` | 107×107 | 캐릭터 동작 |
-| `assets/characters/캐릭터이미지7.png` | 135×90 | 캐릭터 동작 |
+| `assets/characters/캐릭터이미지6.png` | 107×107 | 원본 보존, 슬라이딩 포즈라 로딩/애니메이션 제외 |
+| `assets/characters/캐릭터이미지7.png` | 135×90 | 원본 보존, 슬라이딩 포즈라 로딩/애니메이션 제외 |
 | `assets/characters/캐릭터이미지8.png` | 96×129 | 캐릭터 동작 |
 | `assets/characters/캐릭터이미지9.png` | 91×120 | 캐릭터 동작 |
 | `assets/ui/기타이미지11.png` | 200×101 | 기존 수채화 UI |
@@ -46,3 +46,5 @@
 흰 배경 제거 기록은 `tools/orange-processing-report.json`, 재현 스크립트는 `tools/prepare_oranges.py`입니다. Pillow/numpy/scipy는 자산 준비에만 필요하고 게임에는 필요 없습니다.
 
 배경 분리 개선: 이미지 파일 변경 없이 `game.js`의 배경 렌더링에만 1.25 CSS px 블러와 채도/대비 94%를 적용합니다. 다른 모든 이미지와 UI는 필터 없이 표시합니다.
+
+거대화 파괴 효과: 장애물은 위 목록의 기존 PNG를 회전·축소해 그립니다. 먼지/별은 작은 Canvas 도형이며 별도 이미지 파일을 생성하지 않았습니다. 사용 캐릭터는 1·2·3·4·5·8·9의 7장입니다. 6·7번 원본은 보존합니다.
