@@ -58,6 +58,19 @@
   let obstacleChoices = { single:0, double:0 };
   const obstaclePaths = OBSTACLES.map(o => o.path);
   const paths = [...Object.values(asset).flat(), ...obstaclePaths];
+  const pauseIcons = { running:'assets/ui/기타이미지15.png', paused:'assets/ui/멈춤버튼.jpg' };
+  const pauseIconImage = $('pause').querySelector('img');
+  let pausedIconReady = false;
+  const pausedIconPreview = new Image();
+  pausedIconPreview.onload = () => { pausedIconReady = true; syncPauseIcon(); };
+  pausedIconPreview.onerror = () => { pausedIconReady = false; syncPauseIcon(); };
+  pausedIconPreview.src = pauseIcons.paused;
+  pauseIconImage.addEventListener('error', () => {
+    if (pauseIconImage.getAttribute('src') === pauseIcons.paused) {
+      pausedIconReady = false; syncPauseIcon();
+    }
+  });
+
 
   function prepareSprite(path, img) {
     const c = document.createElement('canvas');
@@ -144,9 +157,15 @@
     $('giant-time').textContent = `${Math.ceil(giantRemaining)}초`;
     $('giant').setAttribute('aria-label', `거대화 남은 시간 ${Math.ceil(giantRemaining)}초`);
   }
+  function syncPauseIcon() {
+    const src = mode === 'paused' && pausedIconReady ? pauseIcons.paused : pauseIcons.running;
+    if (pauseIconImage.getAttribute('src') !== src) pauseIconImage.src = src;
+    $('pause').setAttribute('aria-pressed', String(mode === 'paused'));
+  }
   function panel(name) {
     $('overlay').hidden = !name;
     for (const n of ['welcome', 'result', 'paused']) $(n).hidden = n !== name;
+    syncPauseIcon();
   }
   function start() {
     if (!loaded || $('start').disabled) return;

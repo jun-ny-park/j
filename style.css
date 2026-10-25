@@ -17,8 +17,8 @@ canvas:focus{outline:none}canvas:focus-visible{outline:2px solid #c9a572;outline
 .overlay{container-type:size}
 .result{position:relative;isolation:isolate;container-type:inline-size;flex:none;width:min(400px,calc(100% - 12px),calc(94cqh * 217 / 201));aspect-ratio:217/201;filter:drop-shadow(0 9px 18px #76512533)}
 .result>img{display:block;width:100%;height:100%;object-fit:contain;pointer-events:none}
-/* Restore the relative layout from 9743ff5: heading beside the scholar,
-   caption at 40%, score at 54%, and the inset retry button at 71%. */
+/* Historic result layout, with the requested smaller upper-right heading,
+   raised caption, and a thinner centered retry button. */
 /* These opaque paper masks cover ink baked into the original 217x201 PNG.
    They are independent of the dynamic text/button and never cover the character. */
 .result::before,.result::after,.result-legacy-button-cover{content:"";position:absolute;z-index:1;background:#fff1d2;pointer-events:none}
@@ -26,10 +26,10 @@ canvas:focus{outline:none}canvas:focus-visible{outline:2px solid #c9a572;outline
 .result::after{left:32%;top:39%;width:40%;height:25%}
 .result-legacy-button-cover{left:25%;top:70%;width:55%;height:21%}
 .result-title,.result-caption,#final-score{position:absolute;z-index:2;left:10%;width:80%;margin:0;padding:0;display:flex;align-items:center;justify-content:center;text-align:center;white-space:nowrap;background:#fff1d2;color:#745439;font-family:inherit;font-weight:400;letter-spacing:0;line-height:1;box-sizing:border-box}
-.result-title{left:35%;width:57%;top:12%;height:24%;font-size:8.89cqw;color:#438abb}
-.result-caption{top:40%;height:14%;font-size:7.94cqw}
+.result-title{left:37%;width:55%;top:10%;height:24%;font-size:7.78cqw;color:#438abb}
+.result-caption{top:37%;height:14%;font-size:7.94cqw}
 #final-score{top:54%;height:16%;font-size:clamp(9px,calc(100cqw / var(--score-chars,2)),12.06cqw);font-weight:700;font-variant-numeric:tabular-nums}
-.result button{position:absolute;z-index:2;left:23.5%;top:71%;width:53%;height:18%;margin:0;padding:0 6px;border:0;border-radius:999px;background:#61a2bf;color:#fff9df;cursor:pointer;display:flex;align-items:center;justify-content:center;font-family:inherit;font-size:6.98cqw;font-weight:400;line-height:1;white-space:nowrap;touch-action:manipulation}
+.result button{position:absolute;z-index:2;left:28.27%;top:72.62%;width:43.46%;height:14.76%;margin:0;padding:0 6px;border:0;border-radius:999px;background:#61a2bf;color:#fff9df;cursor:pointer;display:flex;align-items:center;justify-content:center;font-family:inherit;font-size:6.14cqw;font-weight:400;line-height:1;white-space:nowrap;touch-action:manipulation}
 .result button span{position:static;display:block;width:auto;height:auto;margin:0;padding:0;background:none;color:inherit;font:inherit}
 @media(max-width:640px){.result{width:min(400px,calc(100% - 12px),calc(94cqh * 217 / 201))}}
 
@@ -60,3 +60,12 @@ canvas:focus{outline:none}canvas:focus-visible{outline:2px solid #c9a572;outline
 @media (hover:none) and (pointer:coarse) and (max-width:1024px) and (orientation:portrait){
   main{width:100vh;height:100vw;width:100dvh;height:100dvw;padding:max(4px,env(safe-area-inset-right)) max(8px,env(safe-area-inset-bottom)) max(4px,env(safe-area-inset-left)) max(8px,env(safe-area-inset-top));transform:translateX(100vw) rotate(90deg);transform:translateX(100dvw) rotate(90deg)}
 }
+
+/* Fix the icon box to the original PNG ratio; swapping sources cannot move the HUD. */
+#pause{position:relative;aspect-ratio:65/67}
+#pause img{width:100%;height:100%;object-fit:contain}
+/* Match the number box to the actual track, excluding the orange illustration. */
+.health-panel #health{inset:41% 3% auto 28%;width:auto;height:36%;margin:0;padding:0;display:flex;align-items:center;justify-content:center;line-height:1;transform:none;pointer-events:none}
+#resume{position:relative;align-self:center;width:82%;padding:10px 16px;border-width:1px;border-radius:999px;box-shadow:0 1px 0 #467c9f;font-size:17.6px;line-height:1.25;white-space:nowrap}
+/* Transparent hit extensions preserve at least 44px without thick visual buttons. */
+#restart::after,#resume::after{content:"";position:absolute;left:50%;top:50%;width:max(100%,44px);height:max(100%,44px);transform:translate(-50%,-50%);background:none}
