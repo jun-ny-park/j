@@ -171,7 +171,7 @@
   $('restart').addEventListener('click', start);
   $('resume').addEventListener('click', pause);
   $('pause').addEventListener('click', pause);
-  for (const el of [canvas, $('jump')]) el.addEventListener('pointerdown', e => { e.preventDefault(); jump(); });
+  canvas.addEventListener('pointerdown', e => { e.preventDefault(); jump(); });
   document.addEventListener('keydown', e => {
     if (e.code === 'Space' && !['BUTTON', 'A'].includes(e.target.tagName)) {
       e.preventDefault();
