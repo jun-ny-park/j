@@ -14,6 +14,7 @@ python -m http.server 8001
 
 ```sh
 node tests/browser.cjs
+node tests/result-panel.cjs
 node tests/collection.cjs
 node tests/giant-smash.cjs
 node tests/difficulty.cjs

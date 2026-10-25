@@ -326,8 +326,11 @@
   function endGame() {
     mode = 'over'; boostRemaining = 0; giantRemaining = 0; visualScale = 1; effects = [];
     flyingObstacles = []; giantIntroRemaining = 0; lastGiantStep = -1;
-    $('pause').disabled = true; $('final-score').textContent = score.toLocaleString('ko-KR');
-    panel('result'); $('status').textContent = `게임 오버. 최종 점수 ${score}.`;
+    $('pause').disabled = true;
+    const resultText = `${score.toLocaleString('ko-KR')}점`;
+    $('final-score').textContent = resultText;
+    $('final-score').style.setProperty('--score-chars', resultText.length);
+    panel('result'); $('status').textContent = `황감제 결과 발표. 그대의 성적은 ${score}점.`;
     hud();
   }
   function stridePhase() {
