@@ -22,6 +22,8 @@ window.smashTest={
   page.on('pageerror',e=>errors.push(e.message));page.on('request',r=>requests.push(decodeURIComponent(r.url())));page.on('response',r=>{if(r.status()>=400)bad.push(r.url());});
   await page.addInitScript(()=>{window.draws=[];const draw=CanvasRenderingContext2D.prototype.drawImage;CanvasRenderingContext2D.prototype.drawImage=function(im,...args){if(this.canvas.id==='game'&&im.src){const t=this.getTransform();window.draws.push({src:im.src,args,alpha:this.globalAlpha,angle:Math.atan2(t.b,t.a),x:t.e,y:t.f,filter:this.filter});}return draw.call(this,im,...args);};});
   await page.route('**/game.js',r=>r.fulfill({contentType:'text/javascript',body:source}));await page.clock.install();await page.goto(process.env.GAME_URL||'http://127.0.0.1:8001');await page.waitForFunction(()=>document.querySelector('#loading').textContent.includes('SPACE'));
+  // Drive frames explicitly so host CPU load cannot advance flight ages between assertions.
+  await page.clock.pauseAt(await page.evaluate(()=>Date.now()+100));
   const smashCases=await page.evaluate(()=>{const g=smashTest,r=[];for(const fps of [15,60,120])for(const boost of [0,5])for(let n=0;n<5;n++){
    const tick=seconds=>{let left=seconds;while(left>1e-9){const dt=Math.min(left,1/fps);g.update(dt);left-=dt;}};g.isolated(5,boost,115);g.obstacle(n);g.update(1/fps);const hit=g.state();tick(.3);const later=g.state();tick(.31);const end=g.state();r.push({fps,boost,n,hit,later,end});
   }return r;});

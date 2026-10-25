@@ -30,14 +30,14 @@
   const GRAVITY = 1800, FIRST_JUMP = 640, SECOND_JUMP = 620;
   const SPEED = 306;
   const DIFFICULTY = [
-    { start:0, name:'쉬움', speed:1, recovery:.48, extra:400, recipes:[['single'],['flat'],['single'],['single']] },
-    { start:20, name:'보통', speed:1.08, recovery:.36, extra:280, recipes:[['single'],['single'],['double'],['flat']] },
-    { start:45, name:'어려움', speed:1.16, recovery:.28, extra:160, recipes:[['single','double'],['double'],['double','single'],['single']] },
-    { start:75, name:'도전', speed:1.23, recovery:.22, extra:60, recipes:[['single','single'],['double','single'],['single','double'],['single','single','double']] },
-    { start:110, name:'고수', speed:1.28, recovery:.18, extra:0, recipes:[['single','double','single'],['double','single','double'],['single','single'],['double','double'],['single','double']] }
+    { start:0, name:'적응', speed:1, recovery:.32, extra:100, recipes:[['single'],['single']] },
+    { start:5, name:'보통', speed:1.15, recovery:.22, extra:50, recipes:[['single'],['single','single'],['double'],['single']] },
+    { start:15, name:'어려움', speed:1.30, recovery:.15, extra:24, recipes:[['double','single'],['single','single'],['single','double'],['double'],['single','double','single']] },
+    { start:30, name:'매우 어려움', speed:1.45, recovery:.11, extra:12, recipes:[['single','double','single'],['double','single','double'],['single','single','double'],['double','single','single'],['single','double']] },
+    { start:50, name:'극한', speed:1.55, recovery:.085, extra:0, recipes:[['single','double','single','double'],['single','single','double','single'],['double','single','single','double'],['double','double','single'],['single','double','double','single']] }
   ];
-  const SPEED_RAMP_SECONDS = 3;
-  const MAX_SPEED = SPEED * 1.28 * 1.5;
+  const SPEED_RAMP_SECONDS = 1.5;
+  const MAX_SPEED = SPEED * 1.55 * 1.5;
   const SPACING_MARGIN = 48; // body alignment plus approximately 30ms input slack
   const SINGLE_FLIGHT = 2 * FIRST_JUMP / GRAVITY;
   const SECOND_AT = .24;
@@ -46,13 +46,14 @@
   const BOOST_SECONDS = 5, GIANT_SECONDS = 5, BOOST_FACTOR = 1.5;
   const player = { x: 106, y: 363, w: 74, h: 98, vy: 0, grounded: true, land: 0, jumps: 0 };
   let loaded = false, mode = 'loading', score = 0, health = 3;
-  let distance = 0, time = 0, runTime = 0, spawnIn = .5, invincible = 0;
+  let distance = 0, time = 0, runTime = 0, spawnIn = .25, invincible = 0;
   let boostRemaining = 0, giantRemaining = 0, visualScale = 1, orangeSequence = 0, objects = [], effects = [], last = 0;
   let worldWidth = 1100, tiles = [], patternIndex = 0;
   let canvasPixelRatio = 1, viewportSpeedCap = MAX_SPEED;
   let flyingObstacles = [], giantIntroRemaining = 0, lastGiantStep = -1;
   let currentStage = 0;
-  let nextBrushAt = 14, nextGiantAt = 6;
+  let nextBrushAt = 14, nextGiantAt = 24;
+  let giantExitReadyAt = 0;
   let obstacleChoices = { single:0, double:0 };
   const obstaclePaths = OBSTACLES.map(o => o.path);
   const paths = [...Object.values(asset).flat(), ...obstaclePaths];
@@ -115,9 +116,9 @@
   function resize() {
     const r = canvas.getBoundingClientRect(), dpr = Math.min(devicePixelRatio || 1, 2);
     worldWidth = H * r.width / r.height;
-    player.x = Math.min(106, Math.max(32, 32+(worldWidth-320)*.20));
+    player.x = Math.min(106, Math.max(16, 16+(worldWidth-320)*.18));
     // Keep a visible approach window on narrow phones, even for the scroll.
-    viewportSpeedCap = Math.max(SPEED*1.28, Math.min(MAX_SPEED, (worldWidth-(player.x+player.w/2)+46)/(.62+.12)));
+    viewportSpeedCap = Math.max(SPEED*1.55, Math.min(MAX_SPEED, (worldWidth-(player.x+player.w/2)+46)/(.56+.09)));
     canvas.width = Math.round(r.width * dpr); canvas.height = Math.round(r.height * dpr);
     canvasPixelRatio = canvas.width / r.width;
   }
@@ -143,10 +144,10 @@
   function start() {
     if (!loaded || $('start').disabled) return;
     score = 0; health = 3; distance = 0; time = 0; runTime = 0;
-    spawnIn = .5; patternIndex = 0; invincible = 0; boostRemaining = 0; giantRemaining = 0; visualScale = 1; orangeSequence = 0;
+    spawnIn = .25; patternIndex = 0; invincible = 0; boostRemaining = 0; giantRemaining = 0; visualScale = 1; orangeSequence = 0;
     objects = []; effects = [];
     flyingObstacles = []; giantIntroRemaining = 0; lastGiantStep = -1;
-    currentStage = 0; nextBrushAt = 14; nextGiantAt = 6; obstacleChoices = {single:0,double:0};
+    currentStage = 0; nextBrushAt = 14; nextGiantAt = 24; giantExitReadyAt = 0; obstacleChoices = {single:0,double:0};
     Object.assign(player, { y: GROUND - player.h, vy: 0, grounded: true, land: 0, jumps: 0 });
     mode = 'running'; panel(null); canvas.focus({preventScroll:true}); $('pause').disabled = false;
     $('pause').setAttribute('aria-label', '일시 정지');
@@ -220,18 +221,26 @@
     return (low+high)/2;
   }
   function landingGap(previous, next, level) {
-    // Even if a brush starts/expires or the difficulty changes between obstacles:
-    // max travel until landing+recovery+next lead, minus min prior approach.
-    const flight = previous.kind==='double' ? DOUBLE_FLIGHT : SINGLE_FLIGHT;
-    return MAX_SPEED*(flight+level.recovery+next.lead)-SPEED*previous.lead+SPACING_MARGIN+level.extra;
+    const flight=previous.kind==='double'?DOUBLE_FLIGHT:SINGLE_FLIGHT;
+    const minSpeed=SPEED*difficultySpeed();
+    const approach=Math.max(0,(previous.center??worldWidth+60)-(player.x+player.w/2))/minSpeed;
+    const horizon=approach+flight+level.recovery+next.lead+.15;
+    // Uncollected brushes can change speed before this group arrives. New brushes
+    // are only placed in the rest area after a group's final obstacle.
+    const mayBoost=boostRemaining>0 || objects.some(o=>o.type==='brush'&&!o.hit);
+    const maxSpeed=Math.min(viewportSpeedCap,SPEED*difficultySpeed(time+horizon)*(mayBoost?BOOST_FACTOR:1));
+    return maxSpeed*(flight+level.recovery+next.lead)-minSpeed*previous.lead+SPACING_MARGIN+level.extra;
   }
   function spawn() {
     const level = difficultyAt();
-    const recipe = level.recipes[patternIndex % level.recipes.length];
-    const anchor = worldWidth+60, nodes=[];
+    const recipe = level.recipes[patternIndex % level.recipes.length].map(kind=>kind==='double'&&time<10?'single':kind);
+    const baseAnchor=worldWidth+60;
+    let anchor=patternIndex===0 ? Math.min(baseAnchor,player.x+player.w/2+SPEED*2) : baseAnchor;
+    if(giantExitReadyAt>time) anchor=Math.max(anchor,player.x+player.w/2+predictTravel(giantExitReadyAt-time+.56)+80);
+    const nodes=[];
     for(let i=0;i<recipe.length;i++) {
       const kind = recipe[i];
-      const lead = kind==='double' ? [.54,.58,.62][(patternIndex+i)%3] : [.34,.37,.40][(patternIndex+i)%3];
+      const lead = kind==='double' ? [.52,.54,.56][(patternIndex+i)%3] : [.33,.36,.39][(patternIndex+i)%3];
       const node = {kind, lead, center:anchor};
       if(nodes.length) {
         const previous = nodes.at(-1);
@@ -268,10 +277,10 @@
       }
     }
     const lastNode=nodes.at(-1);
-    let after=lastNode.kind==='flat' ? 1000+level.extra : landingGap(lastNode,{lead:.62},level);
+    let after=lastNode.kind==='flat' ? 1000+level.extra : landingGap(lastNode,{lead:.56},level);
     const specials=[];
     if(time>=nextBrushAt && images[asset.brush[0]]) {specials.push('brush'); nextBrushAt=time+36;}
-    if(time>=nextGiantAt && images[asset.giant[0]]) {specials.push('giant'); nextGiantAt=time+28;}
+    if(time>=nextGiantAt && images[asset.giant[0]]) {specials.push('giant'); nextGiantAt=time+48;}
     if(specials.length) {
       // Ground-level item rest area after landing, before any next jump begins.
       const flight=lastNode.kind==='double'?DOUBLE_FLIGHT:SINGLE_FLIGHT;
@@ -281,7 +290,7 @@
       after=Math.max(after,rest+specials.length*100+MAX_SPEED*.85);
     }
     patternIndex++;
-    spawnIn=(lastNode.center-anchor+after)/SPEED;
+    spawnIn=(lastNode.center-anchor+after+Math.max(0,anchor-baseAnchor))/SPEED;
   }
 
   function spriteRect(o) {
@@ -313,7 +322,7 @@
     return false;
   }
   function movementFactor() {
-    return Math.min(viewportSpeedCap/SPEED, 1.28*BOOST_FACTOR, difficultySpeed()*brushFactor());
+    return Math.min(viewportSpeedCap/SPEED, 1.55*BOOST_FACTOR, difficultySpeed()*brushFactor());
   }
   function collectEffect(amount) {
     const recent = effects.find(e => e.type === 'collect' && e.life > .08);
@@ -325,7 +334,7 @@
   }
   function endGame() {
     mode = 'over'; boostRemaining = 0; giantRemaining = 0; visualScale = 1; effects = [];
-    flyingObstacles = []; giantIntroRemaining = 0; lastGiantStep = -1;
+    flyingObstacles = []; giantIntroRemaining = 0; lastGiantStep = -1; giantExitReadyAt=0;
     $('pause').disabled = true;
     const resultText = `${score.toLocaleString('ko-KR')}점`;
     $('final-score').textContent = resultText;
@@ -350,8 +359,21 @@
     const size = Math.max(1, visualScale), w=player.w*size, h=player.h*size;
     return {x:player.x+(player.w-w)/2+8,y:player.y+player.h-h+15,w:w-16,h:h-20};
   }
+  function secureGiantExit() {
+    const feet=player.y+player.h-GROUND;
+    const landing=player.grounded?0:Math.max(0,(-player.vy+Math.sqrt(player.vy**2-2*GRAVITY*feet))/GRAVITY);
+    const settle=landing+Math.max(.18,difficultyAt().recovery);
+    giantExitReadyAt=time+settle;
+    const front=player.x+player.w/2+predictTravel(settle+.56)+player.w/2+16;
+    for(const o of objects) {
+      if(o.type!=='obstacle'||o.destroyed)continue;
+      const b=hitRect(o);
+      if(b.x<=front && b.x+b.w>=player.x-16)smashObstacle(o);
+    }
+  }
   function advance(realDt, factor) {
     const runDt = realDt * factor;
+    const giantWasActive=giantRemaining>0;
     for (const f of flyingObstacles) f.age += realDt;
     flyingObstacles = flyingObstacles.filter(f=>f.age<f.duration-1e-9);
     for (const e of effects) { e.life -= realDt; e.y -= realDt * (e.type==='collect'?22:0); }
@@ -392,6 +414,8 @@
         $('status').textContent='과거 책 획득. 5초 거대화!';
       }
     }
+    // Finish the power-up with a short clear approach corridor, not extra immunity.
+    if(giantWasActive && giantRemaining===0) secureGiantExit();
     const giantBox=giantRemaining>0?destructionBox():null;
     for (const o of objects) {
       if (o.type!=='obstacle' || (o.hit && giantRemaining<=0) || o.destroyed || !collides(giantBox||damageBox,o)) continue;
@@ -417,7 +441,7 @@
   function update(dt) {
     if (mode !== 'running') return;
     // Real-time boost clock and movement clock are separate. Small steps avoid tunnelling
-    // up to 587.52px/s and split exactly at item expiration boundaries.
+    // up to 711.45px/s and split exactly at item expiration boundaries.
     // Vertical physics always uses realDt, independent of either speed multiplier.
     let remaining = dt;
     while (remaining > 1e-9 && mode === 'running') {

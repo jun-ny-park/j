@@ -1,0 +1,282 @@
+[
+  {
+    "policy": "perfect",
+    "time": 120.00118593829957,
+    "over": false,
+    "health": 3,
+    "score": 21900,
+    "jumps": 38,
+    "windows": [
+      {
+        "from": 0,
+        "to": 5,
+        "n": 1,
+        "high": 0
+      },
+      {
+        "from": 5,
+        "to": 15,
+        "n": 1,
+        "high": 0
+      },
+      {
+        "from": 15,
+        "to": 30,
+        "n": 4,
+        "high": 1
+      },
+      {
+        "from": 30,
+        "to": 50,
+        "n": 3,
+        "high": 1
+      },
+      {
+        "from": 50,
+        "to": 90,
+        "n": 15,
+        "high": 7
+      }
+    ]
+  },
+  {
+    "policy": "idle",
+    "time": 21.13333333333274,
+    "over": true,
+    "health": 0,
+    "score": 1600,
+    "jumps": 0,
+    "windows": [
+      {
+        "from": 0,
+        "to": 5,
+        "n": 0,
+        "high": 0
+      },
+      {
+        "from": 5,
+        "to": 15,
+        "n": 0,
+        "high": 0
+      },
+      {
+        "from": 15,
+        "to": 30,
+        "n": 0,
+        "high": 0
+      },
+      {
+        "from": 30,
+        "to": 50,
+        "n": 0,
+        "high": 0
+      },
+      {
+        "from": 50,
+        "to": 90,
+        "n": 0,
+        "high": 0
+      }
+    ]
+  },
+  {
+    "policy": "spam-160ms",
+    "time": 42.82499999999818,
+    "over": true,
+    "health": 0,
+    "score": 4600,
+    "jumps": 0,
+    "windows": [
+      {
+        "from": 0,
+        "to": 5,
+        "n": 0,
+        "high": 0
+      },
+      {
+        "from": 5,
+        "to": 15,
+        "n": 0,
+        "high": 0
+      },
+      {
+        "from": 15,
+        "to": 30,
+        "n": 0,
+        "high": 0
+      },
+      {
+        "from": 30,
+        "to": 50,
+        "n": 0,
+        "high": 0
+      },
+      {
+        "from": 50,
+        "to": 90,
+        "n": 0,
+        "high": 0
+      }
+    ]
+  },
+  {
+    "policy": "spam-220ms",
+    "time": 42.85833333333151,
+    "over": true,
+    "health": 0,
+    "score": 4300,
+    "jumps": 0,
+    "windows": [
+      {
+        "from": 0,
+        "to": 5,
+        "n": 0,
+        "high": 0
+      },
+      {
+        "from": 5,
+        "to": 15,
+        "n": 0,
+        "high": 0
+      },
+      {
+        "from": 15,
+        "to": 30,
+        "n": 0,
+        "high": 0
+      },
+      {
+        "from": 30,
+        "to": 50,
+        "n": 0,
+        "high": 0
+      },
+      {
+        "from": 50,
+        "to": 90,
+        "n": 0,
+        "high": 0
+      }
+    ]
+  },
+  {
+    "policy": "always-double",
+    "time": 120.0085018626317,
+    "over": false,
+    "health": 3,
+    "score": 19500,
+    "jumps": 38,
+    "windows": [
+      {
+        "from": 0,
+        "to": 5,
+        "n": 1,
+        "high": 0
+      },
+      {
+        "from": 5,
+        "to": 15,
+        "n": 1,
+        "high": 0
+      },
+      {
+        "from": 15,
+        "to": 30,
+        "n": 4,
+        "high": 1
+      },
+      {
+        "from": 30,
+        "to": 50,
+        "n": 3,
+        "high": 1
+      },
+      {
+        "from": 50,
+        "to": 90,
+        "n": 15,
+        "high": 7
+      }
+    ]
+  },
+  {
+    "policy": "miss-every-8",
+    "time": 89.09022196873484,
+    "over": true,
+    "health": 0,
+    "score": 13500,
+    "jumps": 21,
+    "windows": [
+      {
+        "from": 0,
+        "to": 5,
+        "n": 1,
+        "high": 0
+      },
+      {
+        "from": 5,
+        "to": 15,
+        "n": 1,
+        "high": 0
+      },
+      {
+        "from": 15,
+        "to": 30,
+        "n": 4,
+        "high": 1
+      },
+      {
+        "from": 30,
+        "to": 50,
+        "n": 2,
+        "high": 1
+      },
+      {
+        "from": 50,
+        "to": 90,
+        "n": 13,
+        "high": 7
+      }
+    ]
+  },
+  {
+    "policy": "miss-every-20",
+    "time": 120.01320831758518,
+    "over": false,
+    "health": 3,
+    "score": 21900,
+    "jumps": 37,
+    "windows": [
+      {
+        "from": 0,
+        "to": 5,
+        "n": 1,
+        "high": 0
+      },
+      {
+        "from": 5,
+        "to": 15,
+        "n": 1,
+        "high": 0
+      },
+      {
+        "from": 15,
+        "to": 30,
+        "n": 4,
+        "high": 1
+      },
+      {
+        "from": 30,
+        "to": 50,
+        "n": 3,
+        "high": 1
+      },
+      {
+        "from": 50,
+        "to": 90,
+        "n": 14,
+        "high": 7
+      }
+    ]
+  }
+]

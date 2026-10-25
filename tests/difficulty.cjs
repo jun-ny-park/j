@@ -1,13 +1,14 @@
 const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
 const {chromium}=require('playwright');
-const source=fs.readFileSync(path.resolve(__dirname,'../game.js'),'utf8').replace(' hud();requestAnimationFrame(frame);',`
+const source=fs.readFileSync(path.resolve(__dirname,'../game.js'),'utf8').replace('o.hit = true; o.destroyed = true;', "o.hit = true; o.destroyed = true; if(window.testDestroyed)window.testDestroyed.add(o.group+':'+o.order);").replace(' hud();requestAnimationFrame(frame);',`
 window.difficultyTest={
+ destroyed:(group,order)=>window.testDestroyed?.has(group+':'+order),
  state:()=>({mode,time,stage:difficultyAt().index,speed:SPEED*movementFactor(),target:difficultyAt().speed,
- boostRemaining,giantRemaining,visualScale,player:{...player},
+ boostRemaining,giantRemaining,visualScale,giantExitReadyAt,player:{...player},
  objects:objects.map(o=>({...o})),worldWidth,cap:viewportSpeedCap,patternIndex,nextBrushAt,nextGiantAt,score,health}),
  stageAt:t=>difficultyAt(t),speedAt:t=>difficultySpeed(t),predictTravel,update,jump,pause,start,render,
  isolated:(at,b=0,g=0)=>{start();time=at;currentStage=difficultyAt().index;objects=[];spawnIn=1e6;boostRemaining=b;giantRemaining=g;},
- pattern:(stage,index,b=false,g=false,at=null)=>{start();time=at??DIFFICULTY[stage].start+5;currentStage=difficultyAt().index;
+ pattern:(stage,index,b=false,g=false,at=null)=>{start();window.testDestroyed=new Set();time=at??DIFFICULTY[stage].start+(stage===0?1:stage===1?6:2);currentStage=difficultyAt().index;
  obstacleChoices={single:Math.floor(index/DIFFICULTY[stage].recipes.length),double:Math.floor(index/DIFFICULTY[stage].recipes.length)};patternIndex=index;nextBrushAt=nextGiantAt=1e6;boostRemaining=b?5:0;giantRemaining=g?5:0;visualScale=g?1.5:1;
  objects=[];spawn();spawnIn=1e6;return objects.filter(o=>o.type==='obstacle').map(o=>({...o}));},
  recipes:()=>DIFFICULTY.map(s=>s.recipes.length),
@@ -19,10 +20,10 @@ window.difficultyTest={
  try{
   const page=await browser.newPage({viewport:{width:1280,height:960}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.route('**/game.js',r=>r.fulfill({contentType:'text/javascript',body:source}));await page.clock.install();await page.goto(process.env.GAME_URL||'http://127.0.0.1:8001');await page.waitForFunction(()=>document.querySelector('#loading').textContent.includes('SPACE'));
-  const levels=await page.evaluate(()=>[0,19.999,20,44.999,45,74.999,75,109.999,110,500].map(t=>({t,index:difficultyTest.stageAt(t).index,target:difficultyTest.stageAt(t).speed,speed:difficultyTest.speedAt(t)})));
-  assert.deepEqual(levels.map(l=>l.index),[0,0,1,1,2,2,3,3,4,4]);assert.deepEqual(levels.map(l=>l.target),[1,1,1.08,1.08,1.16,1.16,1.23,1.23,1.28,1.28]);
-  for(const boundary of [20,45,75,110]){const values=await page.evaluate(t=>[difficultyTest.speedAt(t-.0001),difficultyTest.speedAt(t+.0001),difficultyTest.speedAt(t+3)],boundary);assert(Math.abs(values[1]-values[0])<1e-5);assert.equal(values[2],levels.find(l=>l.t===boundary).target);}
-  const physics=await page.evaluate(()=>{const g=difficultyTest,r=[];for(const t of [5,25,50,80,115])for(const b of [0,5]){g.isolated(t,b);g.jump();g.update(.2);const first=g.state().player;g.jump();g.update(.2);const second=g.state().player;r.push({first,second});}return r;});
+  const levels=await page.evaluate(()=>[0,4.999,5,14.999,15,29.999,30,49.999,50,500].map(t=>({t,index:difficultyTest.stageAt(t).index,target:difficultyTest.stageAt(t).speed,speed:difficultyTest.speedAt(t)})));
+  assert.deepEqual(levels.map(l=>l.index),[0,0,1,1,2,2,3,3,4,4]);assert.deepEqual(levels.map(l=>l.target),[1,1,1.15,1.15,1.30,1.30,1.45,1.45,1.55,1.55]);
+  for(const boundary of [5,15,30,50]){const values=await page.evaluate(t=>[difficultyTest.speedAt(t-.0001),difficultyTest.speedAt(t+.0001),difficultyTest.speedAt(t+1.5)],boundary);assert(Math.abs(values[1]-values[0])<1e-5);assert.equal(values[2],levels.find(l=>l.t===boundary).target);}
+  const physics=await page.evaluate(()=>{const g=difficultyTest,r=[];for(const t of [1,11,17,32,52])for(const b of [0,5]){g.isolated(t,b);g.jump();g.update(.2);const first=g.state().player;g.jump();g.update(.2);const second=g.state().player;r.push({first,second});}return r;});
   for(const r of physics){assert(Math.abs(r.first.y-271)<1e-7);assert(Math.abs(r.second.y-183)<1e-7);assert(Math.abs(r.second.vy+260)<1e-7);}
   const routes=await page.evaluate(()=>{
    const g=difficultyTest,results=[];
@@ -31,7 +32,7 @@ window.difficultyTest={
     let cursor=0,airborne=false,jumpAt=0,second=false,lastLanding=null,steps=0;
     while(cursor<initial.length&&steps++<20000){
      const state=g.state();const o=state.objects.find(o=>o.type==='obstacle'&&o.order===cursor)||(airborne?initial[cursor]:null);
-     if(!o)throw new Error('target disappeared '+JSON.stringify(r));
+     if(!o&&g.destroyed(initial[cursor].group,initial[cursor].order)){cursor++;continue;}if(!o)throw new Error('target disappeared '+JSON.stringify(r));
      if(airborne&&state.player.grounded){airborne=false;lastLanding=state.time;cursor++;continue;}
      let dt=1/fps;
      if(!airborne){
@@ -40,7 +41,7 @@ window.difficultyTest={
        if(lastLanding!==null)r.minRecovery=Math.min(r.minRecovery,state.time-lastLanding);
        r.visible&&=o.x<state.worldWidth;g.jump();airborne=true;jumpAt=state.time;second=false;continue;
       }
-      dt=Math.min(dt,Math.max(.00005,delta/587.52));
+      dt=Math.min(dt,Math.max(.00005,delta/711.45));
      }else if(o.pattern==='double'&&!second){
       const until=.24-(state.time-jumpAt);
       if(until<=1e-8){g.jump();second=true;continue;}
@@ -54,16 +55,16 @@ window.difficultyTest={
    const recipes=g.recipes();
    for(let stage=0;stage<5;stage++)for(let index=0;index<recipes[stage]*3;index++)for(const boost of [false,true])for(const giant of [false,true])for(const fps of [15,60,120])results.push(route(stage,index,boost,giant,fps));
    for(let stage=0;stage<5;stage++)for(let index=0;index<recipes[stage]*3;index++)for(const boost of [false,true])for(const jitter of [-.03,.03])results.push(route(stage,index,boost,false,60,jitter));
-   for(const [stage,at]of [[0,19.7],[1,44.7],[2,74.7],[3,109.7]])for(const jitter of [-.03,0,.03])for(const boost of [false,true])results.push(route(stage,0,boost,false,60,jitter,at));
+   for(const [stage,at]of [[0,4.7],[1,14.7],[2,29.7],[3,49.7]])for(const jitter of [-.03,0,.03])for(const boost of [false,true])results.push(route(stage,0,boost,false,60,jitter,at));
    return results;
   });
-  for(const r of routes){assert.equal(r.health,3,JSON.stringify(r));assert(r.finished,JSON.stringify(r));if(r.minRecovery!==null)assert(r.minRecovery>=.18-1e-3,JSON.stringify(r));}
+  for(const r of routes){assert.equal(r.health,3,JSON.stringify(r));assert(r.finished,JSON.stringify(r));if(r.minRecovery!==null)assert(r.minRecovery>=.085-1e-3,JSON.stringify(r));}
   const paths=new Set(routes.flatMap(r=>r.paths));assert.deepEqual([...paths].sort(),[1,2,6,7,9].map(n=>`assets/obstacles/기타이미지${n}.png`).sort());
   assert(routes.filter(r=>r.stage===0).every(r=>r.paths.every(p=>/기타이미지[12]\.png$/.test(p))));
-  const rare=await page.evaluate(()=>difficultyTest.rareSeries());for(const type of ['brush','giant']){const events=rare.filter(e=>e.type===type);for(let i=1;i<events.length;i++)assert(events[i].t-events[i-1].t>=(type==='brush'?36:28));}
-  const pause=await page.evaluate(()=>{const g=difficultyTest;g.isolated(19.99,5,5);g.pause();const before=g.state();g.update(50);const after=g.state();g.pause();g.update(.02);const resumed=g.state();g.update(1.01);const faded=g.state();g.update(5.1);for(let i=0;i<3;i++){g.collision();g.update(.01);}const over=g.state();g.start();return {before,after,resumed,faded,over,reset:g.state()};});
-  assert.deepEqual(pause.before,pause.after);assert.equal(pause.resumed.stage,1);assert.equal(await page.locator('#difficulty-note').count(),0);assert.equal(pause.reset.stage,0);assert.equal(pause.reset.time,0);assert.equal(pause.reset.boostRemaining,0);assert.equal(pause.reset.giantRemaining,0);assert.equal(pause.over.mode,'over');
-  const caps=[];for(const width of [320,390,1280]){await page.setViewportSize({width,height:900});await page.waitForFunction(()=>{const r=document.querySelector('canvas').getBoundingClientRect();return Math.abs(r.width/difficultyTest.state().worldWidth-r.height/500)<.001;});const cap=await page.evaluate(()=>{difficultyTest.isolated(120,5);return difficultyTest.state();});assert(cap.speed<=587.52+1e-6);assert(cap.cap>=306*1.28);caps.push({width,cap:cap.cap,speed:cap.speed});}
+  const rare=await page.evaluate(()=>difficultyTest.rareSeries());for(const type of ['brush','giant']){const events=rare.filter(e=>e.type===type);for(let i=1;i<events.length;i++)assert(events[i].t-events[i-1].t>=(type==='brush'?36:48));}
+  const pause=await page.evaluate(()=>{const g=difficultyTest;g.isolated(14.99,5,5);g.pause();const before=g.state();g.update(50);const after=g.state();g.pause();g.update(.02);const resumed=g.state();g.update(1.01);const faded=g.state();g.update(5.1);for(let i=0;i<3;i++){g.collision();g.update(.01);}const over=g.state();g.start();return {before,after,resumed,faded,over,reset:g.state()};});
+  assert.deepEqual(pause.before,pause.after);assert.equal(pause.resumed.stage,2);assert.equal(await page.locator('#difficulty-note').count(),0);assert.equal(pause.reset.stage,0);assert.equal(pause.reset.time,0);assert.equal(pause.reset.boostRemaining,0);assert.equal(pause.reset.giantRemaining,0);assert.equal(pause.over.mode,'over');
+  const caps=[];for(const width of [320,390,1280]){await page.setViewportSize({width,height:900});await page.waitForFunction(()=>{const r=document.querySelector('canvas').getBoundingClientRect();return Math.abs(r.width/difficultyTest.state().worldWidth-r.height/500)<.001;});const cap=await page.evaluate(()=>{difficultyTest.isolated(120,5);return difficultyTest.state();});assert(cap.speed<=711.45+1e-6);assert(cap.cap>=306*1.55);caps.push({width,cap:cap.cap,speed:cap.speed});}
   const continuous=[];
   for(const width of [1280,390,320]){
    await page.setViewportSize({width,height:900});await page.waitForFunction(()=>{const r=document.querySelector('canvas').getBoundingClientRect();return Math.abs(r.width/difficultyTest.state().worldWidth-r.height/500)<.001;});
@@ -77,14 +78,14 @@ window.difficultyTest={
      if(!airborne&&target){
       const delta=target.x+target.w/2-(state.player.x+state.player.w/2)-g.predictTravel(target.lead);
       if(delta<=.05){if(lastLanding!==null)minRecovery=Math.min(minRecovery,state.time-lastLanding);minVisible=Math.min(minVisible,(state.worldWidth-target.x)/state.speed);g.jump();airborne=true;jumpAt=state.time;second=false;jumps++;continue;}
-      dt=Math.min(dt,Math.max(.00005,delta/587.52));
+      dt=Math.min(dt,Math.max(.00005,delta/711.45));
      }else if(airborne&&target.pattern==='double'&&!second){const until=.24-(state.time-jumpAt);if(until<=1e-8){g.jump();second=true;continue;}dt=Math.min(dt,until);}
      g.update(dt);
     }
     const state=g.state();return {width:state.worldWidth,health:state.health,time:state.time,stage:state.stage,jumps,minRecovery,minVisible,score:state.score};
    }));
   }
-  for(const run of continuous){assert.equal(run.health,3,JSON.stringify(run));assert(run.time>=185);assert.equal(run.stage,4);assert(run.minRecovery>=.18-1e-3,JSON.stringify(run));assert(run.minVisible>=.10,JSON.stringify(run));}
+  for(const run of continuous){assert.equal(run.health,3,JSON.stringify(run));assert(run.time>=185);assert.equal(run.stage,4);assert(run.minRecovery>=.085-1e-3,JSON.stringify(run));assert(run.minVisible>=.075,JSON.stringify(run));}
   const output=path.resolve(__dirname,'../work/validation');fs.mkdirSync(output,{recursive:true});await page.evaluate(()=>{difficultyTest.pattern(4,0);difficultyTest.render();difficultyTest.pause();});await page.screenshot({path:path.join(output,'difficulty-expert.png')});
   assert.deepEqual(errors,[]);
   console.log(JSON.stringify({result:'PASS',routes:routes.length,obstacles:routes.reduce((n,r)=>n+r.nodes,0),continuous,minLandingRecovery:Math.min(...routes.filter(r=>r.minRecovery!==null).map(r=>r.minRecovery)),levels,caps,rareItems:rare,checks:['fixed real-time jump physics','five stages and smooth ramps','all recipes normal/boost/giant/both at 15/60/120fps','stage-boundary and input jitter routes','no impossible collisions','landing room','real-time rare-item cooldowns','pause freezes difficulty/effects','restart resets stage','speed cap','no JavaScript errors']}));
