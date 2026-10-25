@@ -30,6 +30,6 @@ node tests/background-style.cjs
 
 `difficulty.cjs`는 미래 이동량을 예측하는 자동 입력으로 회피 가능한 경로와 착지 공간을 검증합니다. 실제 플레이어의 성공률을 측정하는 테스트는 아닙니다.
 
-`balance.cjs`는 이전 커밋 `6920b98`의 고정 입력 결과(`fixtures/balance-before.json`)와 새 패턴 밀도를 비교하고, 10초 2단 장애물 제한·거대화 종료 안전 전환을 검사합니다. 자동 입력 생존 시간은 사람의 숙련도를 측정한 값이 아닙니다.
+`balance.cjs`는 직전 커밋 `7a7b5c5`의 고정 입력 결과(`fixtures/balance-before.json`)와 새 패턴 밀도를 비교하고, 10초 2단 장애물 도입·거대화 종료 안전 전환을 검사합니다. 자동 입력 생존 시간은 사람의 숙련도를 측정한 값이 아닙니다.
 
 `orientation.cjs`는 Chromium의 Android/iPhone 크기·터치 에뮬레이션으로 첫 접속의 CSS 회전, 세로↔가로 반복 전환, 뷰포트 높이 변경, Canvas의 논리 비율과 래스터 크기, 회전된 버튼/화면 터치, 상태 유지와 화면 잘림을 검사합니다. 실제 Safari/Android Chrome 기기 검증은 별도 필요합니다.

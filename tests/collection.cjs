@@ -53,7 +53,7 @@ window.collectionTest={
   assert.equal(specials[0].state.boostRemaining,5);assert.equal(specials[1].state.giantRemaining,5);
   const combined=await page.evaluate(()=>{const g=collectionTest,r=[];for(let i=0;i<5;i++){g.setup(true,true);g.obstacle(i);g.put('orange',i%6,'right');g.update(.001);const first=g.state();for(let n=0;n<6;n++){g.put('orange',n,'top');g.update(.001);}g.update(.05);r.push({first,final:g.state()});}return r;});
   for(const r of combined){assert.equal(r.first.health,3);assert.equal(r.first.score,100);assert.equal(r.first.flights.length,1);assert.equal(r.final.score,700);assert.equal(r.final.flights.length,1);assert.equal(r.final.health,3);}
-  const transition=await page.evaluate(()=>{collectionTest.setup(false);collectionTest.boundary(14.99);collectionTest.update(.02);return collectionTest.state();});assert.equal(transition.stage,2);assert.equal(await page.locator('#difficulty-note').count(),0);
+  const transition=await page.evaluate(()=>{collectionTest.setup(false);collectionTest.boundary(19.99);collectionTest.update(.02);return collectionTest.state();});assert.equal(transition.stage,2);assert.equal(await page.locator('#difficulty-note').count(),0);
   const documents=await page.evaluate(()=>document.body.innerText);assert(!/시험이 어려워지고|시험이 어려워지고 있소|시험이 어려워지고 있도다/.test(documents));
   const original=fs.readFileSync(path.resolve(__dirname,'../game.js'),'utf8');const html=fs.readFileSync(path.resolve(__dirname,'../index.html'),'utf8');const css=fs.readFileSync(path.resolve(__dirname,'../style.css'),'utf8');
   for(const text of [original,html,css])assert(!/stageNotice|difficulty-note|시험이 어려워지/.test(text));

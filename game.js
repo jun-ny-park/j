@@ -16,7 +16,7 @@
     items: [1, 2, 3, 4, 5, 6].map(n => `assets/items/귤${n}.png`),
     brush: ['assets/extras/기타이미지4.png'],
     giant: ['assets/extras/기타이미지3.png'],
-    ui: [11, 12, 14].map(n => `assets/ui/기타이미지${n}.png`).concat(['assets/ui/멈춤버튼.jpg','assets/ui/성적공개.jpg','assets/ui/재시도버튼.jpg'])
+    ui: [11, 12, 13, 14, 15].map(n => `assets/ui/기타이미지${n}.png`)
   };
   const OBSTACLES = [
     { path: 'assets/obstacles/기타이미지1.png', kind: 'single', height: 55, core: {x:.08,y:.08,w:.84,h:.86} },
@@ -30,14 +30,15 @@
   const GRAVITY = 1800, FIRST_JUMP = 640, SECOND_JUMP = 620;
   const SPEED = 306;
   const DIFFICULTY = [
-    { start:0, name:'적응', speed:1, recovery:.32, extra:100, recipes:[['single'],['single']] },
-    { start:5, name:'보통', speed:1.15, recovery:.22, extra:50, recipes:[['single'],['single','single'],['double'],['single']] },
-    { start:15, name:'어려움', speed:1.30, recovery:.15, extra:24, recipes:[['double','single'],['single','single'],['single','double'],['double'],['single','double','single']] },
-    { start:30, name:'매우 어려움', speed:1.45, recovery:.11, extra:12, recipes:[['single','double','single'],['double','single','double'],['single','single','double'],['double','single','single'],['single','double']] },
-    { start:50, name:'극한', speed:1.55, recovery:.085, extra:0, recipes:[['single','double','single','double'],['single','single','double','single'],['double','single','single','double'],['double','double','single'],['single','double','double','single']] }
+    { start:0, name:'적응', speed:1.25, recovery:.24, extra:48, recipes:[['single'],['single','single']] },
+    { start:10, name:'보통', speed:1.45, recovery:.18, extra:24, recipes:[['single','double'],['double','single'],['single','single'],['double']] },
+    { start:20, name:'어려움', speed:1.65, recovery:.13, extra:12, recipes:[['single','double','single'],['double','single','double'],['single','double'],['double','single'],['single','single','double']] },
+    { start:35, name:'매우 어려움', speed:1.85, recovery:.10, extra:4, recipes:[['single','double','single','double'],['double','single','double'],['single','single','double'],['double','single','single','double'],['single','double','double','single']] },
+    { start:50, name:'극한', speed:2.0, recovery:.085, extra:0, recipes:[['single','double','single','double'],['double','single','double','single'],['double','double','single'],['single','single','double','single'],['single','double','double','single']] }
   ];
   const SPEED_RAMP_SECONDS = 1.5;
-  const MAX_SPEED = SPEED * 1.55 * 1.5;
+  // Final factors relative to the original 306px/s, never compounded with older stages.
+  const MAX_SPEED = SPEED * 2.5; // Brush safety cap: 765px/s rather than 918px/s.
   const SPACING_MARGIN = 48; // body alignment plus approximately 30ms input slack
   const SINGLE_FLIGHT = 2 * FIRST_JUMP / GRAVITY;
   const SECOND_AT = .24;
@@ -57,17 +58,6 @@
   let obstacleChoices = { single:0, double:0 };
   const obstaclePaths = OBSTACLES.map(o => o.path);
   const paths = [...Object.values(asset).flat(), ...obstaclePaths];
-  const optionalUiPaths = new Set([...document.querySelectorAll('[data-ui-fallback]')].map(img => img.getAttribute('src')));
-  for (const img of document.querySelectorAll('[data-ui-fallback]')) {
-    const showFallback = () => {
-      img.hidden = true;
-      img.classList.add('is-image-missing');
-      img.parentElement.classList.add('is-image-missing');
-    };
-    img.addEventListener('error', showFallback);
-    if (img.complete && !img.naturalWidth) showFallback();
-  }
-
 
   function prepareSprite(path, img) {
     const c = document.createElement('canvas');
@@ -108,9 +98,7 @@
       resolve();
     };
     img.onerror = () => {
-      if (optionalUiPaths.has(path)) console.warn(`UI 대체 표시 사용: ${path}`);
-      else { failed.push(path); console.error(`이미지 로딩 실패: ${path}`); }
-      resolve();
+      failed.push(path); console.error(`이미지 로딩 실패: ${path}`); resolve();
     };
     img.src = path;
   }))).then(() => {
@@ -135,7 +123,7 @@
     worldWidth = H * width / height;
     player.x = Math.min(106, Math.max(16, 16+(worldWidth-320)*.18));
     // Keep a visible approach window on narrow phones, even for the scroll.
-    viewportSpeedCap = Math.max(SPEED*1.55, Math.min(MAX_SPEED, (worldWidth-(player.x+player.w/2)+46)/(.56+.09)));
+    viewportSpeedCap = Math.min(MAX_SPEED, Math.max(SPEED*1.25, (worldWidth-(player.x+player.w/2)+46)/(.56+.14)));
     canvas.width = Math.round(width * dpr); canvas.height = Math.round(height * dpr);
     canvasPixelRatio = canvas.width / width;
   }
@@ -214,7 +202,7 @@
   }
   function difficultySpeed(at = time) {
     const level = difficultyAt(at);
-    if (!level.index) return 1;
+    if (!level.index) return DIFFICULTY[0].speed;
     const t = Math.max(0, Math.min(1, (at-level.start)/SPEED_RAMP_SECONDS));
     return DIFFICULTY[level.index-1].speed + (level.speed-DIFFICULTY[level.index-1].speed)*t*t*(3-2*t);
   }
@@ -241,7 +229,7 @@
   }
   function landingGap(previous, next, level) {
     const flight=previous.kind==='double'?DOUBLE_FLIGHT:SINGLE_FLIGHT;
-    const minSpeed=SPEED*difficultySpeed();
+    const minSpeed=Math.min(viewportSpeedCap,SPEED*difficultySpeed());
     const approach=Math.max(0,(previous.center??worldWidth+60)-(player.x+player.w/2))/minSpeed;
     const horizon=approach+flight+level.recovery+next.lead+.15;
     // Uncollected brushes can change speed before this group arrives. New brushes
@@ -341,7 +329,7 @@
     return false;
   }
   function movementFactor() {
-    return Math.min(viewportSpeedCap/SPEED, 1.55*BOOST_FACTOR, difficultySpeed()*brushFactor());
+    return Math.min(viewportSpeedCap/SPEED, MAX_SPEED/SPEED, difficultySpeed()*brushFactor());
   }
   function collectEffect(amount) {
     const recent = effects.find(e => e.type === 'collect' && e.life > .08);
@@ -460,7 +448,7 @@
   function update(dt) {
     if (mode !== 'running') return;
     // Real-time boost clock and movement clock are separate. Small steps avoid tunnelling
-    // up to 711.45px/s and split exactly at item expiration boundaries.
+    // up to 765px/s and split exactly at item expiration boundaries.
     // Vertical physics always uses realDt, independent of either speed multiplier.
     let remaining = dt;
     while (remaining > 1e-9 && mode === 'running') {

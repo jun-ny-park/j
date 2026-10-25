@@ -9,7 +9,7 @@ window.balanceTest={start,update,jump,pause,spawn,predictTravel,render,
  const d=OBSTACLES[2],h=d.height,w=h*images[d.path].naturalWidth/images[d.path].naturalHeight;
  objects.push({type:'obstacle',path:d.path,core:d.core,x:player.x+player.w/2+10-w/2,y:GROUND-h,w,h,hit:false});},
  postExitSpawn:()=>{objects=[];spawn();spawnIn=1e6;},
- gate:at=>{start();time=at;currentStage=difficultyAt().index;patternIndex=2;objects=[];spawn();return objects.filter(o=>o.type==='obstacle').map(o=>o.pattern);}
+ gate:at=>{start();time=at;currentStage=difficultyAt().index;patternIndex=0;objects=[];spawn();return objects.filter(o=>o.type==='obstacle').map(o=>o.pattern);}
 };hud();requestAnimationFrame(frame);`);
 (async()=>{
  const browser=await chromium.launch({executablePath:process.env.CHROMIUM_PATH||(fs.existsSync('/usr/bin/chromium')?'/usr/bin/chromium':undefined),headless:true,args:['--no-sandbox']});
@@ -19,11 +19,11 @@ window.balanceTest={start,update,jump,pause,spawn,predictTravel,render,
  const outcomes=await page.evaluate(()=>{
   const g=balanceTest,results=[];window.balanceCaptures=[];
   for(const policy of ['perfect','idle','spam-160ms','spam-220ms','always-double','miss-every-8','miss-every-20']){
-   g.start();const passed=new Set(),windows=[{from:0,to:5,n:0,high:0},{from:5,to:15,n:0,high:0},{from:15,to:30,n:0,high:0},{from:30,to:50,n:0,high:0},{from:50,to:90,n:0,high:0}],encounters=[];
+   g.start();const passed=new Set(),windows=[{from:0,to:10,n:0,high:0},{from:10,to:20,n:0,high:0},{from:20,to:35,n:0,high:0},{from:35,to:50,n:0,high:0},{from:50,to:90,n:0,high:0}],encounters=[];
    let airborne=false,target=null,jumpAt=0,second=false,lastTap=-1,nextOrdinal=0,skip=false,steps=0;
    while(g.state().mode==='running'&&g.state().time<120&&steps++<60000){
     const s=g.state();let dt=1/60;
-    if(policy==='perfect' && !window.balanceBaseline){const at=[.5,5.5,15.5,30.5,52][window.balanceCaptures.length];if(at!==undefined&&s.time>=at){g.render();window.balanceCaptures.push({at,data:document.querySelector('#game').toDataURL()});}}
+    if(policy==='perfect' && !window.balanceBaseline){const at=[.5,10.5,20.5,35.5,52][window.balanceCaptures.length];if(at!==undefined&&s.time>=at){g.render();window.balanceCaptures.push({at,data:document.querySelector('#game').toDataURL()});}}
     if(policy==='idle'){g.update(dt);continue;}
     if(policy.startsWith('spam')){const rate=policy==='spam-160ms'?.16:.22;if(s.time-lastTap>=rate){g.jump();lastTap=s.time;}g.update(dt);continue;}
     if(airborne&&s.player.grounded){passed.add(target.group+':'+target.order);airborne=false;}
@@ -40,7 +40,7 @@ window.balanceTest={start,update,jump,pause,spawn,predictTravel,render,
       const window=windows.find(w=>s.time>=w.from&&s.time<w.to);if(window){window.n++;if(target.pattern==='double')window.high++;}encounters.push({t:s.time,kind:target.pattern});
       g.jump();airborne=true;jumpAt=s.time;second=false;continue;
      }
-     dt=Math.min(dt,Math.max(.00005,delta/750));
+     dt=Math.min(dt,Math.max(.00005,delta/765));
     }else if(airborne&&!second&&(target.pattern==='double'||policy==='always-double')){
      const until=.24-(s.time-jumpAt);if(until<=1e-8){g.jump();second=true;continue;}dt=Math.min(dt,until);
     }
@@ -53,7 +53,7 @@ window.balanceTest={start,update,jump,pause,spawn,predictTravel,render,
   assert(outcomes.find(o=>o.policy==='perfect').time>=120,'no forced time limit');assert.equal(outcomes.find(o=>o.policy==='perfect').health,3);
   for(const policy of ['idle','spam-160ms','spam-220ms','always-double'])assert(outcomes.find(o=>o.policy===policy).over,policy);
   const gate=await page.evaluate(()=>[balanceTest.gate(9.99),balanceTest.gate(10)]);assert(gate[0].every(k=>k==='single'));assert(gate[1].includes('double'));
-  const exits=await page.evaluate(()=>{const r=[];for(const at of [17,32,52])for(const boost of [false,true])for(const air of [false,true]){
+  const exits=await page.evaluate(()=>{const r=[];for(const at of [22,37,52])for(const boost of [false,true])for(const air of [false,true]){
    balanceTest.exitSetup(at,boost,air);balanceTest.update(.01);const exit=balanceTest.state();balanceTest.postExitSpawn();const next=balanceTest.state();
    const earliest=next.objects.filter(o=>o.type==='obstacle').sort((a,b)=>a.x+a.w/2-b.x-b.w/2)[0];
    const distance=earliest.x+earliest.w/2-(next.player.x+next.player.w/2),required=balanceTest.predictTravel(Math.max(0,next.giantExitReadyAt-next.time)+earliest.lead);
@@ -62,7 +62,7 @@ window.balanceTest={start,update,jump,pause,spawn,predictTravel,render,
   for(const e of exits){assert.equal(e.health,3,JSON.stringify(e));assert.equal(e.giant,0);assert.equal(e.remaining,0);assert(e.readyAfter>=.18-1e-8);assert(e.distance>=e.required,JSON.stringify(e));}
   const baselineFile=path.resolve(__dirname,'fixtures/balance-before.json');if(fs.existsSync(baselineFile)){
    const baseline=JSON.parse(fs.readFileSync(baselineFile,'utf8'));const old=baseline.find(o=>o.policy==='perfect'),now=outcomes.find(o=>o.policy==='perfect');
-   assert(now.windows[2].n>old.windows[2].n,'15-second obstacle density increased');assert(now.windows[3].n>old.windows[3].n,'30-second density increased');assert(now.windows[4].n>old.windows[4].n,'50-second density increased');
+   assert(now.windows[0].n>old.windows[0].n,'early obstacle density increased');assert(now.windows[2].n>old.windows[2].n,'20-second obstacle density increased');assert(now.windows[3].n>=old.windows[3].n && now.windows[3].high>old.windows[3].high,'35-second patterns retain density and add double jumps');assert(now.windows[4].n>old.windows[4].n,'50-second density increased');
   }
   const output=path.resolve(__dirname,'../work/validation');fs.mkdirSync(output,{recursive:true});for(const capture of await page.evaluate(()=>window.balanceCaptures))fs.writeFileSync(path.join(output,`balance-${capture.at}s.png`),Buffer.from(capture.data.split(',')[1],'base64'));
   console.log(JSON.stringify({result:'PASS',outcomes,exitCases:exits,notes:'Scripted input policies are not measurements of human novice/expert lifetimes.'}));
