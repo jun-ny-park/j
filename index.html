@@ -1,26 +1,16 @@
 <!doctype html>
 <html lang="ko">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#f4eddc">
-  <title>유생런 · 귤빛 여정</title>
-  <link rel="stylesheet" href="style.css">
-  <script src="game.js" defer></script>
-</head>
-<body>
-  <main>
-    <header><a class="brand" href="./">유생런 <span>儒生 RUN</span></a><span class="edition">작은 유생의 커다란 모험</span></header>
-    <section class="intro"><p class="eyebrow">A LITTLE JOURNEY THROUGH JOSEON</p><h1>귤빛 바람 따라,<br>오늘도 달리는 유생.</h1><p>갓을 고쳐 쓰고, 도포를 휘날리며.<br class="mobile"> 따뜻한 풍경 속으로 떠나 볼까요?</p></section>
-    <section class="game" aria-label="유생런 게임">
-      <div class="hud"><div><span class="label">모은 점수</span><strong id="score">0</strong></div><div class="health"><span class="label">유생의 기운</span><span id="health" aria-label="체력 3 / 3">♥ ♥ ♥</span></div><button id="pause" aria-label="일시 정지" disabled>Ⅱ</button></div>
-      <canvas id="game" width="960" height="480" tabindex="0" aria-label="자동으로 달리는 유생. 스페이스바 또는 화면 터치로 점프합니다."></canvas>
-      <div id="overlay" class="overlay"><div class="seal">旅</div><p id="overlay-kicker">첫 번째 이야기</p><h2 id="overlay-title">귤빛 여정을 시작해요</h2><p id="overlay-description">귤을 모으고, 다가오는 장애물을 폴짝 넘어요.</p><button id="start" class="primary">달리기 시작 <span>→</span></button><small>SPACE 또는 화면 터치로 점프</small></div>
-      <div class="game-bottom"><span>제 1 장 <b>귤 향기 나는 마을</b></span><span id="distance">0 m</span></div>
-    </section>
-    <div class="guide"><span><kbd>SPACE</kbd> / 화면 터치 <b>점프</b></span><span><i class="orange-dot"></i> 귤 하나 <b>+100점</b></span><span><span class="heart">♥</span> 장애물을 조심하세요</span><button id="jump">폴짝! 점프 ↑</button></div>
-    <footer><span>서두르지 않아도 괜찮아요. 한 걸음씩, 더 멀리.</span><span>유생런 · 귤빛 여정</span></footer>
-    <p id="status" class="sr-only" role="status" aria-live="polite"></p>
-  </main>
-</body>
-</html>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#fff4dc"><title>유생런 · 황감제를 향해!</title><link rel="stylesheet" href="style.css"><script src="game.js" defer></script></head>
+<body><main>
+<header><a href="./" class="brand">유생런<span>귤빛 조선 모험</span></a><span class="chapter">황감제를 향한 작은 여정</span></header>
+<section class="intro"><p>달콤한 귤 한 알, 씩씩한 발걸음!</p><h1>유생님, 황감제로 떠나 볼까요?</h1><span>귤 향기 가득한 조선 마을을 달려요.</span></section>
+<section class="game" aria-label="유생런 게임">
+<canvas id="game" width="1100" height="500" tabindex="0" aria-label="자동으로 달리는 유생. 스페이스바 또는 화면 터치로 점프"></canvas>
+<div class="hud"><div class="score-panel"><img src="assets/ui/기타이미지12.png" alt=""><strong id="score" aria-label="점수">0</strong></div><div class="health-panel"><img src="assets/ui/기타이미지14.png" alt=""><div class="health-track"><div id="health-fill"></div></div><span id="health">3 / 3</span></div><button id="pause" class="image-button" aria-label="일시 정지" disabled><img src="assets/ui/기타이미지15.png" alt=""></button></div>
+<div id="overlay" class="overlay"><div id="welcome" class="welcome"><p class="tag">귤빛 조선 모험 · 첫 번째 이야기</p><h2 id="overlay-title">황감제를 향해, 폴짝!</h2><p id="overlay-description">귤을 모으고 장애물을 넘으며<br>우리 유생의 여정을 함께해요.</p><img class="welcome-character" src="assets/characters/캐릭어이미지1.png" alt="파란 도포를 입은 유생"><button id="start" class="image-button start-button" aria-label="달리기 시작"><img src="assets/ui/기타이미지11.png" alt="시작하기"></button><small id="loading">그림을 불러오는 중…</small></div>
+<div id="result" class="result" hidden><img src="assets/ui/기타이미지13.png" alt="게임 오버. 최종 점수"><strong id="final-score">0</strong><button id="restart" aria-label="다시 달리기"></button></div>
+<div id="paused" class="paused" hidden><p>잠깐 쉬어 가요</p><h2>유생님, 숨 돌리셨나요?</h2><button id="resume" class="pill">계속 달리기 →</button></div></div>
+<div class="game-footer"><span>귤빛 마을 <b>→ 황감제</b></span><span id="distance">0 m</span></div></section>
+<div class="guide"><span><kbd>SPACE</kbd> 또는 화면 터치로 점프</span><span><img src="assets/items/귤이미지2.png" alt="귤"> 귤 하나 +100점</span><span>장애물을 조심해요!</span><button id="jump" class="pill">폴짝! 점프 ↑</button></div>
+<p id="asset-warning" hidden role="alert"></p><footer><img src="assets/extras/기타이미지10.png" alt="책 더미"><img src="assets/extras/기타이미지3.png" alt="과거 책"><span>귤을 모아, 꿈을 향해 한 걸음 더.</span><img src="assets/extras/기타이미지4.png" alt="붓"></footer><p id="status" class="sr-only" role="status" aria-live="polite"></p>
+</main></body></html>
