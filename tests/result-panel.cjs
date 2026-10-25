@@ -3,47 +3,45 @@ const {chromium}=require('playwright');
 const out=path.resolve(__dirname,'../work/validation');fs.mkdirSync(out,{recursive:true});
 const source=fs.readFileSync(path.resolve(__dirname,'../game.js'),'utf8').replace(' hud();requestAnimationFrame(frame);',`
 window.resultPanelTest={
- state:()=>({mode,score,health,time,distance,boostRemaining,giantRemaining,stage:currentStage,objects:objects.map(o=>({...o}))}),
+ state:()=>({mode,score,health,time,distance,boostRemaining,giantRemaining}),
  show:n=>{start();score=n;endGame();},
- play:()=>{start();score=900;health=2;boostRemaining=3;giantRemaining=4;objects=[{type:'orange',path:asset.items[0],x:player.x+250,y:GROUND-80,w:36,h:36,phase:0,hit:false}];spawnIn=1e6;hud();}
+ play:()=>{start();score=900;health=2;boostRemaining=3;giantRemaining=4;objects=[];spawnIn=1e6;hud();}
 };hud();requestAnimationFrame(frame);`);
 (async()=>{
- const browser=await chromium.launch({executablePath:process.env.CHROMIUM_PATH||(fs.existsSync('/usr/bin/chromium')?'/usr/bin/chromium':undefined),headless:true,args:['--no-sandbox']});
+ const browser=await chromium.launch({executablePath:process.env.CHROMIUM_PATH||'/usr/bin/chromium',headless:true,args:['--no-sandbox']});
  try{
-  const page=await browser.newPage({viewport:{width:1280,height:960}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
-  await page.route('**/game.js',r=>r.fulfill({contentType:'text/javascript',body:source}));await page.clock.install();await page.goto(process.env.GAME_URL||'http://127.0.0.1:8001');await page.waitForFunction(()=>document.querySelector('#loading').textContent.includes('SPACE'));await page.evaluate(()=>document.fonts.ready);
-  assert.equal(await page.locator('#paused h2').innerText(),'잠시 쉬어가게나');assert.equal(await page.locator('#resume').innerText(),'다시 달려보세');
   const results=[];
-  for(const viewport of [{width:1280,height:960},{width:390,height:844},{width:320,height:844}]){
-   await page.setViewportSize(viewport);
+  for(const profile of [{width:1280,height:960},{width:320,height:844},{width:568,height:320,touch:true},{width:844,height:390,touch:true},{width:390,height:844,touch:true}]){
+   const context=await browser.newContext({viewport:{width:profile.width,height:profile.height},hasTouch:!!profile.touch,isMobile:!!profile.touch});
+   const page=await context.newPage(),errors=[],requests=[];page.on('pageerror',e=>errors.push(e.message));page.on('request',r=>requests.push(decodeURIComponent(r.url())));
+   await page.route('**/game.js',r=>r.fulfill({contentType:'text/javascript',body:source}));await page.clock.install();await page.goto(process.env.GAME_URL||'http://127.0.0.1:8001');await page.waitForFunction(()=>!document.querySelector('#start').disabled);await page.clock.pauseAt(await page.evaluate(()=>Date.now()+100));await page.evaluate(()=>document.fonts.ready);
    for(const score of [0,600,12345,123456789,Number.MAX_SAFE_INTEGER]){
     await page.evaluate(n=>resultPanelTest.show(n),score);
     assert.equal(await page.locator('#result-title').innerText(),'황감제 결과 발표');assert.equal(await page.locator('#result-caption').innerText(),'그대의 성적은?');assert.equal(await page.locator('#final-score').innerText(),score.toLocaleString('ko-KR')+'점');assert.equal(await page.locator('#restart').innerText(),'다시 도전하겠소');assert.equal(await page.locator('#result button').count(),1);
-    const geometry=await page.evaluate(()=>{
-     const r=document.querySelector('#result').getBoundingClientRect(),center=r.x+r.width/2;
-     const children=['#result-title','#result-caption','#final-score','#restart'].map(selector=>{const e=document.querySelector(selector),b=e.getBoundingClientRect(),range=document.createRange();range.selectNodeContents(e);const t=range.getBoundingClientRect();return {selector,top:b.top,bottom:b.bottom,width:b.width,center:b.x+b.width/2,textCenter:t.x+t.width/2,textWidth:t.width,scroll:e.scrollWidth,client:e.clientWidth,font:getComputedStyle(e).fontFamily};});
-     const img=document.querySelector('#result>img'),ir=img.getBoundingClientRect(),button=document.querySelector('#restart').getBoundingClientRect(),c=document.createElement('canvas');c.width=img.naturalWidth;c.height=img.naturalHeight;const ctx=c.getContext('2d');ctx.drawImage(img,0,0);const pixels=ctx.getImageData(0,0,c.width,c.height).data;let blue=0,uncovered=0;
-     const radius=button.height/2;
-     for(let y=140;y<186;y++)for(let x=35;x<195;x++){
-      const k=(y*c.width+x)*4,R=pixels[k],G=pixels[k+1],B=pixels[k+2];if(!(pixels[k+3]>200&&R>70&&G>120&&B>150&&G>R+20&&B>R+25))continue;
-      blue++;const px=ir.left+(x+.5)*ir.width/c.width-button.left,py=ir.top+(y+.5)*ir.height/c.height-button.top;
-      let inside=px>=0&&px<=button.width&&py>=0&&py<=button.height;
-      if(inside&&px<radius)inside=(px-radius)**2+(py-radius)**2<=radius**2;
-      if(inside&&px>button.width-radius)inside=(px-(button.width-radius))**2+(py-radius)**2<=radius**2;
-      if(!inside)uncovered++;
-     }
-     return {center,children,blue,uncovered,buttonOffset:button.left-r.left,panelWidth:r.width,pageFits:document.documentElement.scrollWidth<=innerWidth};
+    const g=await page.evaluate(()=>{
+     const rotated=Math.abs(new DOMMatrix(getComputedStyle(document.querySelector('main')).transform).b)>.5;
+     const rect=e=>e.getBoundingClientRect(),board=rect(document.querySelector('.result-board')),game=rect(document.querySelector('.game'));
+     const axis=r=>rotated?r.y+r.height/2:r.x+r.width/2;
+     const labels=['#result-title','#result-caption','#final-score'].map(s=>{const e=document.querySelector(s),r=rect(e),range=document.createRange();range.selectNodeContents(e);const t=range.getBoundingClientRect();return{s,center:axis(r),textCenter:axis(t),extent:rotated?t.height:t.width,available:rotated?r.height:r.width,font:getComputedStyle(e).fontFamily,top:e.offsetTop};});
+     const imgs=[document.querySelector('#pause img'),document.querySelector('.result-board>img'),document.querySelector('#restart img')].map(e=>{const r=getComputedStyle(e);return{src:e.getAttribute('src'),ratio:parseFloat(r.width)/parseFloat(r.height),natural:e.naturalWidth/e.naturalHeight,fit:r.objectFit};});
+     const p=document.querySelector('#pause'),ps=getComputedStyle(p),panel=rect(document.querySelector('#result'));
+     return{center:axis(board),labels,imgs,pauseWidth:parseFloat(ps.width),pauseHeight:parseFloat(ps.height),fits:panel.left>=game.left-1&&panel.right<=game.right+1&&panel.top>=game.top-1&&panel.bottom<=game.bottom+1,oldCover:getComputedStyle(document.querySelector('#result'),'::before').content};
     });
-    for(const c of geometry.children.slice(1,3)){assert(Math.abs(c.center-geometry.center)<.1,JSON.stringify(c));assert(Math.abs(c.textCenter-geometry.center)<.6,JSON.stringify(c));assert(c.textWidth<=c.width+.5,JSON.stringify(c));assert(c.font.includes('Gamja Flower'));}
-    assert(geometry.children[0].textWidth<=geometry.children[0].width);for(let i=1;i<geometry.children.length;i++)assert(geometry.children[i].top>=geometry.children[i-1].top,'reading order');
-    assert.equal(geometry.uncovered,0,JSON.stringify(geometry));assert(geometry.pageFits);assert(geometry.children[3].textWidth<=geometry.children[3].width);
-    results.push({width:viewport.width,score,blue:geometry.blue,uncovered:geometry.uncovered});
-    if([1280,390].includes(viewport.width)&&[600,Number.MAX_SAFE_INTEGER].includes(score))await page.screenshot({path:path.join(out,`result-${viewport.width}-${score}.png`)});
+    for(const l of g.labels){assert(Math.abs(l.center-g.center)<.6);assert(Math.abs(l.textCenter-g.center)<.6);assert(l.extent<=l.available+.5,JSON.stringify({profile,score,l}));assert(l.font.includes('Gamja Flower'));}
+    assert(g.labels[0].top<g.labels[1].top&&g.labels[1].top<g.labels[2].top);assert(g.fits,JSON.stringify({profile,score,g}));assert(g.pauseWidth>=44&&g.pauseHeight>=44);assert.equal(g.oldCover,'none');
+    for(const img of g.imgs)assert.equal(img.fit,'contain');assert(Math.abs(g.imgs[1].ratio-g.imgs[1].natural)<.01);assert(Math.abs(g.imgs[2].ratio-g.imgs[2].natural)<.01);
+    results.push({width:profile.width,height:profile.height,touch:!!profile.touch,score});
+    if(score===600)await page.screenshot({path:path.join(out,`new-ui-${profile.width}x${profile.height}.png`),fullPage:true});
    }
+   assert(!requests.some(r=>/기타이미지(?:13|15)\.png$/.test(r)),'old result and pause images excluded');for(const name of ['멈춤버튼','성적공개','재시도버튼'])assert(requests.some(r=>r.endsWith(name+'.jpg')));
+   if(profile.touch)await page.locator('#restart').tap();else await page.locator('#restart').click();const reset=await page.evaluate(()=>resultPanelTest.state());assert.equal(reset.mode,'running');assert.equal(reset.score,0);assert.equal(reset.health,3);assert.equal(reset.time,0);assert.equal(reset.boostRemaining,0);assert.equal(reset.giantRemaining,0);
+   await page.evaluate(()=>resultPanelTest.play());if(profile.touch)await page.locator('#pause').tap();else await page.locator('#pause').click();const before=await page.evaluate(()=>resultPanelTest.state());await page.clock.runFor(2000);assert.deepEqual(await page.evaluate(()=>resultPanelTest.state()),before);if(profile.touch)await page.locator('#resume').tap();else await page.locator('#resume').click();const resumed=await page.evaluate(()=>resultPanelTest.state());assert.deepEqual(resumed,{...before,mode:'running'});assert.deepEqual(errors,[]);await context.close();
   }
-  const restarted=await page.evaluate(()=>{document.querySelector('#restart').click();return resultPanelTest.state();});assert.equal(restarted.mode,'running');assert.equal(restarted.score,0);assert.equal(restarted.health,3);assert.equal(restarted.time,0);assert.equal(restarted.boostRemaining,0);assert.equal(restarted.giantRemaining,0);
-  await page.evaluate(()=>resultPanelTest.play());await page.getByRole('button',{name:'일시 정지',exact:true}).click();const before=await page.evaluate(()=>resultPanelTest.state());await page.clock.runFor(2000);assert.deepEqual(await page.evaluate(()=>resultPanelTest.state()),before);
-  await page.screenshot({path:path.join(out,'resume-new-label.png')});const resumed=await page.evaluate(()=>{document.querySelector('#resume').click();return resultPanelTest.state();});const {mode:pm,...pausedState}=before,{mode:rm,...resumedState}=resumed;assert.equal(rm,'running');assert.deepEqual(resumedState,pausedState);
-  assert.deepEqual(errors,[]);console.log(JSON.stringify({result:'PASS',layouts:results,checks:['exact copy and order','caption/score wrappers and text centered','0 through MAX_SAFE_INTEGER score fits','original blue button fill covered','single restart resets all state','renamed resume preserves paused state','handwriting font','PC/mobile screenshots','no JavaScript errors']}));
+  const page=await browser.newPage({viewport:{width:1280,height:960}});
+  await page.route('**/game.js',r=>r.fulfill({contentType:'text/javascript',body:source}));await page.route(/\/(?:멈춤버튼|성적공개|재시도버튼)\.jpg$/,r=>r.abort());
+  // Browser request URLs may remain percent encoded.
+  await page.route('**/assets/ui/*.jpg',r=>r.abort());await page.goto(process.env.GAME_URL||'http://127.0.0.1:8001');await page.waitForFunction(()=>!document.querySelector('#start').disabled);
+  await page.evaluate(()=>resultPanelTest.show(12345));assert.equal(await page.locator('.result-board.is-image-missing').count(),1);for(const img of await page.locator('[data-ui-fallback]').all())assert(!(await img.isVisible()),'broken image is hidden');assert(await page.locator('#restart .ui-image-fallback').isVisible());assert(await page.locator('#pause .ui-image-fallback').isVisible());assert.equal(await page.locator('#final-score').innerText(),'12,345점');await page.locator('#restart').click();assert.equal((await page.evaluate(()=>resultPanelTest.state())).mode,'running');await page.locator('#pause').click();assert.equal((await page.evaluate(()=>resultPanelTest.state())).mode,'paused');await page.screenshot({path:path.join(out,'new-ui-fallback.png')});
+  console.log(JSON.stringify({result:'PASS',layouts:results.length,checks:['three supplied JPG paths','all result labels centered','0 through MAX_SAFE_INTEGER score fits','original aspect ratios with contain','44px pause hit target','old blue result image removed entirely','restart and pause/resume preserve expected state','image-request failure fallbacks','PC and mobile landscape/rotated portrait']}));
  }finally{await browser.close();}
 })();

@@ -16,7 +16,7 @@
     items: [1, 2, 3, 4, 5, 6].map(n => `assets/items/귤${n}.png`),
     brush: ['assets/extras/기타이미지4.png'],
     giant: ['assets/extras/기타이미지3.png'],
-    ui: [11, 12, 13, 14, 15].map(n => `assets/ui/기타이미지${n}.png`)
+    ui: [11, 12, 14].map(n => `assets/ui/기타이미지${n}.png`).concat(['assets/ui/멈춤버튼.jpg','assets/ui/성적공개.jpg','assets/ui/재시도버튼.jpg'])
   };
   const OBSTACLES = [
     { path: 'assets/obstacles/기타이미지1.png', kind: 'single', height: 55, core: {x:.08,y:.08,w:.84,h:.86} },
@@ -57,6 +57,17 @@
   let obstacleChoices = { single:0, double:0 };
   const obstaclePaths = OBSTACLES.map(o => o.path);
   const paths = [...Object.values(asset).flat(), ...obstaclePaths];
+  const optionalUiPaths = new Set([...document.querySelectorAll('[data-ui-fallback]')].map(img => img.getAttribute('src')));
+  for (const img of document.querySelectorAll('[data-ui-fallback]')) {
+    const showFallback = () => {
+      img.hidden = true;
+      img.classList.add('is-image-missing');
+      img.parentElement.classList.add('is-image-missing');
+    };
+    img.addEventListener('error', showFallback);
+    if (img.complete && !img.naturalWidth) showFallback();
+  }
+
 
   function prepareSprite(path, img) {
     const c = document.createElement('canvas');
@@ -97,7 +108,9 @@
       resolve();
     };
     img.onerror = () => {
-      failed.push(path); console.error(`이미지 로딩 실패: ${path}`); resolve();
+      if (optionalUiPaths.has(path)) console.warn(`UI 대체 표시 사용: ${path}`);
+      else { failed.push(path); console.error(`이미지 로딩 실패: ${path}`); }
+      resolve();
     };
     img.src = path;
   }))).then(() => {
