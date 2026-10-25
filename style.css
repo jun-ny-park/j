@@ -15,21 +15,23 @@ button,kbd{font-family:inherit}button{font-weight:400}.brand{font-weight:400}hea
 canvas:focus{outline:none}canvas:focus-visible{outline:2px solid #c9a572;outline-offset:-3px}
 
 .overlay{container-type:size}
-.result{position:relative;isolation:isolate;container-type:inline-size;flex:none;width:min(315px,calc(100% - 12px),calc(96cqh * 217 / 201));aspect-ratio:217/201;filter:drop-shadow(0 9px 18px #76512533)}
+.result{position:relative;isolation:isolate;container-type:inline-size;flex:none;width:min(400px,calc(100% - 12px),calc(94cqh * 217 / 201));aspect-ratio:217/201;filter:drop-shadow(0 9px 18px #76512533)}
 .result>img{display:block;width:100%;height:100%;object-fit:contain;pointer-events:none}
+/* Restore the relative layout from 9743ff5: heading beside the scholar,
+   caption at 40%, score at 54%, and the inset retry button at 71%. */
 /* These opaque paper masks cover ink baked into the original 217x201 PNG.
    They are independent of the dynamic text/button and never cover the character. */
 .result::before,.result::after,.result-legacy-button-cover{content:"";position:absolute;z-index:1;background:#fff1d2;pointer-events:none}
 .result::before{left:35%;top:13%;width:49%;height:18%}
 .result::after{left:32%;top:39%;width:40%;height:25%}
 .result-legacy-button-cover{left:25%;top:70%;width:55%;height:21%}
-.result-title,.result-caption,#final-score{position:absolute;z-index:2;left:14%;width:72%;margin:0;padding:0;display:flex;align-items:center;justify-content:center;text-align:center;white-space:nowrap;background:#fff1d2;color:#745439;font-family:inherit;font-weight:400;letter-spacing:0;line-height:1;box-sizing:border-box}
-.result-title{top:34%;height:12%;font-size:clamp(12px,8cqw,25px);color:#438abb}
-.result-caption{top:47%;height:10%;font-size:clamp(11px,7.3cqw,23px)}
-#final-score{top:58%;height:13%;font-size:clamp(10px,calc(90cqw / var(--score-chars,2)),min(34px,11cqw));font-variant-numeric:tabular-nums}
-.result button{position:absolute;z-index:2;left:18%;top:74%;width:64%;height:15%;margin:0;padding:0 6px;border:0;border-radius:999px;background:#61a2bf;color:#fff9df;cursor:pointer;display:flex;align-items:center;justify-content:center;font-family:inherit;font-size:clamp(12px,6.7cqw,21px);font-weight:400;line-height:1;white-space:nowrap;touch-action:manipulation}
+.result-title,.result-caption,#final-score{position:absolute;z-index:2;left:10%;width:80%;margin:0;padding:0;display:flex;align-items:center;justify-content:center;text-align:center;white-space:nowrap;background:#fff1d2;color:#745439;font-family:inherit;font-weight:400;letter-spacing:0;line-height:1;box-sizing:border-box}
+.result-title{left:35%;width:57%;top:12%;height:24%;font-size:8.89cqw;color:#438abb}
+.result-caption{top:40%;height:14%;font-size:7.94cqw}
+#final-score{top:54%;height:16%;font-size:clamp(9px,calc(100cqw / var(--score-chars,2)),12.06cqw);font-weight:700;font-variant-numeric:tabular-nums}
+.result button{position:absolute;z-index:2;left:23.5%;top:71%;width:53%;height:18%;margin:0;padding:0 6px;border:0;border-radius:999px;background:#61a2bf;color:#fff9df;cursor:pointer;display:flex;align-items:center;justify-content:center;font-family:inherit;font-size:6.98cqw;font-weight:400;line-height:1;white-space:nowrap;touch-action:manipulation}
 .result button span{position:static;display:block;width:auto;height:auto;margin:0;padding:0;background:none;color:inherit;font:inherit}
-@media(max-width:640px){.result{width:min(280px,calc(100% - 12px),calc(96cqh * 217 / 201))}}
+@media(max-width:640px){.result{width:min(400px,calc(100% - 12px),calc(94cqh * 217 / 201))}}
 
 /* Keep one landscape layout on touch devices, rotating the whole page only in portrait. */
 @media (hover:none) and (pointer:coarse) and (max-width:1024px){
@@ -53,7 +55,7 @@ canvas:focus{outline:none}canvas:focus-visible{outline:2px solid #c9a572;outline
   .game-footer{font-size:11px;line-height:1}
   .effect-timers{top:57px;right:12px}.timer{font-size:18px;min-width:40px;padding:2px 7px}.timer-giant{padding:0 5px}
   .paused{min-width:245px;padding:15px 20px}.paused h2{font-size:27px}
-  .result{width:min(315px,90cqw,calc(96cqh * 217 / 201));height:auto;max-width:none}
+  .result{width:min(400px,90cqw,calc(94cqh * 217 / 201));height:auto;max-width:none}
 }
 @media (hover:none) and (pointer:coarse) and (max-width:1024px) and (orientation:portrait){
   main{width:100vh;height:100vw;width:100dvh;height:100dvw;padding:max(4px,env(safe-area-inset-right)) max(8px,env(safe-area-inset-bottom)) max(4px,env(safe-area-inset-left)) max(8px,env(safe-area-inset-top));transform:translateX(100vw) rotate(90deg);transform:translateX(100dvw) rotate(90deg)}
