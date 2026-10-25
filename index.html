@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f4eddc">
+  <title>유생런 · 귤빛 여정</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="game.js" defer></script>
+</head>
+<body>
+  <main>
+    <header><a class="brand" href="./">유생런 <span>儒生 RUN</span></a><span class="edition">작은 유생의 커다란 모험</span></header>
+    <section class="intro"><p class="eyebrow">A LITTLE JOURNEY THROUGH JOSEON</p><h1>귤빛 바람 따라,<br>오늘도 달리는 유생.</h1><p>갓을 고쳐 쓰고, 도포를 휘날리며.<br class="mobile"> 따뜻한 풍경 속으로 떠나 볼까요?</p></section>
+    <section class="game" aria-label="유생런 게임">
+      <div class="hud"><div><span class="label">모은 점수</span><strong id="score">0</strong></div><div class="health"><span class="label">유생의 기운</span><span id="health" aria-label="체력 3 / 3">♥ ♥ ♥</span></div><button id="pause" aria-label="일시 정지" disabled>Ⅱ</button></div>
+      <canvas id="game" width="960" height="480" tabindex="0" aria-label="자동으로 달리는 유생. 스페이스바 또는 화면 터치로 점프합니다."></canvas>
+      <div id="overlay" class="overlay"><div class="seal">旅</div><p id="overlay-kicker">첫 번째 이야기</p><h2 id="overlay-title">귤빛 여정을 시작해요</h2><p id="overlay-description">귤을 모으고, 다가오는 장애물을 폴짝 넘어요.</p><button id="start" class="primary">달리기 시작 <span>→</span></button><small>SPACE 또는 화면 터치로 점프</small></div>
+      <div class="game-bottom"><span>제 1 장 <b>귤 향기 나는 마을</b></span><span id="distance">0 m</span></div>
+    </section>
+    <div class="guide"><span><kbd>SPACE</kbd> / 화면 터치 <b>점프</b></span><span><i class="orange-dot"></i> 귤 하나 <b>+100점</b></span><span><span class="heart">♥</span> 장애물을 조심하세요</span><button id="jump">폴짝! 점프 ↑</button></div>
+    <footer><span>서두르지 않아도 괜찮아요. 한 걸음씩, 더 멀리.</span><span>유생런 · 귤빛 여정</span></footer>
+    <p id="status" class="sr-only" role="status" aria-live="polite"></p>
+  </main>
+</body>
+</html>
