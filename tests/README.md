@@ -5,7 +5,7 @@
 저장소 루트에서:
 
 ```sh
-npm install --no-save --package-lock=false playwright
+npm install --no-save --package-lock=false playwright sharp
 npx playwright install chromium
 python -m http.server 8001
 ```
@@ -17,6 +17,7 @@ node tests/browser.cjs
 node tests/orientation.cjs
 node tests/result-panel.cjs
 node tests/ui-details.cjs
+node tests/pause-image.cjs
 node tests/collection.cjs
 node tests/giant-smash.cjs
 node tests/difficulty.cjs
@@ -38,3 +39,5 @@ node tests/background-style.cjs
 `result-panel.cjs`는 원본 PNG 안에 인쇄된 제목·예시 점수·파란 버튼의 실제 픽셀이 CSS 마스크로 가려지는지 검사합니다. 42개 화면/점수 조합의 상단 오른쪽 제목·중앙 본문 정렬·간격, 실제 귤 수집 후 최종 점수, 재시작 전체 초기화도 확인합니다. 점수 주입은 테스트 응답에만 있고 운영 게임 코드에는 없습니다.
 
 `ui-details.cjs`는 `613e78b`의 CSS와 비교해 버튼 축소율·제목 이동·멈춤 버튼 크기 유지를 측정합니다(해당 커밋을 포함한 Git 기록 필요). 일시정지 이미지 전환 반복·실패 시 대체, 0~3 체력 숫자 중앙 정렬, 실제 44px 터치 확장 영역 클릭도 검사합니다.
+
+`pause-image.cjs`는 PNG 실제 포맷·알파·원본 크기·불투명 RGB 일치·꽃잎/하이라이트 보존·외곽 체크무늬 투명을 검사합니다. `background-style.cjs`는 3px/83%/88% 기본 설정과 DPR별 강도, 모든 전경의 filter=none 및 불투명한 반복 경계를 검사합니다.

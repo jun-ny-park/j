@@ -1,0 +1,23 @@
+{
+  "sourceSha256": "aec983a36d10c360fa57117408572f792c4c6dad3fdecccbd9bc59d26122cfe2",
+  "outputSha256": "567c0d49d114493a642fc42a5026660cce8cf70faf22b3e8be19ac0386ed8f23",
+  "source": "assets/ui/멈춤버튼.jpg",
+  "output": "assets/ui/멈춤버튼.png",
+  "dimensions": [
+    667,
+    711
+  ],
+  "format": "PNG",
+  "channels": "RGBA",
+  "method": "edge-connected neutral-background flood fill; enclosed whites protected; largest subject component; one-pixel alpha antialiasing",
+  "opaquePixels": 261483,
+  "transparentPixels": 210871,
+  "edgePixels": 1883,
+  "interiorLightPixelsPreserved": 8947,
+  "exteriorMattePixelsRemoved": 1626,
+  "subjectRgb": "copied byte-for-byte from source JPEG decode; no recoloring or synthesis",
+  "threshold": {
+    "minimumChannel": 130,
+    "maximumChannelSpread": 30
+  }
+}

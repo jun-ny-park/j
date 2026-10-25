@@ -4,7 +4,7 @@
   const canvas = $('game');
   const ctx = canvas.getContext('2d');
   // Background only. Blur is measured in CSS pixels; 1 is unchanged color strength.
-  const BACKGROUND_STYLE = { blurPx: 1.25, saturation: .94, contrast: .94 };
+  const BACKGROUND_STYLE = { blurPx: 3, saturation: .83, contrast: .88 };
   const backgroundLayer = document.createElement('canvas');
   const backgroundCtx = backgroundLayer.getContext('2d');
   const characterPath = n => `assets/characters/${n === 1 ? '캐릭어' : '캐릭터'}이미지${n}.png`;
@@ -58,7 +58,7 @@
   let obstacleChoices = { single:0, double:0 };
   const obstaclePaths = OBSTACLES.map(o => o.path);
   const paths = [...Object.values(asset).flat(), ...obstaclePaths];
-  const pauseIcons = { running:'assets/ui/기타이미지15.png', paused:'assets/ui/멈춤버튼.jpg' };
+  const pauseIcons = { running:'assets/ui/기타이미지15.png', paused:'assets/ui/멈춤버튼.png' };
   const pauseIconImage = $('pause').querySelector('img');
   let pausedIconReady = false;
   const pausedIconPreview = new Image();
