@@ -4,28 +4,33 @@
   const canvas = $('game');
   const ctx = canvas.getContext('2d');
   const asset = {
-    backgrounds: [1, 2, 4, 3].map(n => `assets/backgrounds/배경이미지${n}.PNG`),
+    backgrounds: ['assets/backgrounds/bbaakk1.jpg'],
     characters: [1, 2, 3, 4, 5, 6, 7, 8, 9].map(n =>
       `assets/characters/${n === 1 ? '캐릭어' : '캐릭터'}이미지${n}.png`),
-    items: [1, 2, 3, 4, 5, 6].map(n => `assets/items/귤이미지${n}.png`),
+    items: [1, 2, 3, 4, 5, 6].map(n => `assets/items/귤${n}.png`),
     brush: ['assets/extras/기타이미지4.png'],
+    giant: ['assets/extras/기타이미지3.png'],
     ui: [11, 12, 13, 14, 15].map(n => `assets/ui/기타이미지${n}.png`)
   };
-  // No stump/log artwork exists in the repository. Do not substitute another image.
-  // When supplied, use { path: 'assets/obstacles/<actual-file>.png', height: 62/142 }.
-  const WOOD_OBSTACLES = { low: null, high: null };
-  const images = {}, silhouettes = {}, alphaBounds = {}, failed = [];
+  const OBSTACLES = [
+    { path: 'assets/obstacles/기타이미지1.png', kind: 'single', height: 55, core: {x:.08,y:.08,w:.84,h:.86} },
+    { path: 'assets/obstacles/기타이미지2.png', kind: 'single', height: 68, core: {x:.13,y:.10,w:.74,h:.84} },
+    { path: 'assets/obstacles/기타이미지6.png', kind: 'double', height: 165, core: {x:.35,y:.14,w:.30,h:.80} },
+    { path: 'assets/obstacles/기타이미지7.png', kind: 'double', height: 170, core: {x:.40,y:.15,w:.23,h:.80} },
+    { path: 'assets/obstacles/기타이미지9.png', kind: 'double', height: 160, core: {x:.24,y:.08,w:.54,h:.80} }
+  ];
+  const images = {}, silhouettes = {}, alphaBounds = {}, masks = {}, failed = [];
   const H = 500, GROUND = 461;
   const GRAVITY = 1800, FIRST_JUMP = 640, SECOND_JUMP = 620;
   const SPEED = 306; // +17.69% from 260. Brush speed is exactly 459.
-  const BOOST_SECONDS = 10, BOOST_FACTOR = 1.5;
+  const BOOST_SECONDS = 5, GIANT_SECONDS = 5, BOOST_FACTOR = 1.5;
   const player = { x: 106, y: 363, w: 74, h: 98, vy: 0, grounded: true, land: 0, jumps: 0 };
   let loaded = false, mode = 'loading', score = 0, health = 3;
   let distance = 0, time = 0, runTime = 0, spawnIn = .5, invincible = 0;
-  let boostRemaining = 0, objects = [], effects = [], last = 0;
+  let boostRemaining = 0, giantRemaining = 0, visualScale = 1, orangeSequence = 0, objects = [], effects = [], last = 0;
   let worldWidth = 1100, tiles = [], patternIndex = 0;
-  const woodPaths = Object.values(WOOD_OBSTACLES).filter(Boolean).map(o => o.path);
-  const paths = [...Object.values(asset).flat(), ...woodPaths];
+  const obstaclePaths = OBSTACLES.map(o => o.path);
+  const paths = [...Object.values(asset).flat(), ...obstaclePaths];
 
   function prepareSprite(path, img) {
     const c = document.createElement('canvas');
@@ -33,6 +38,7 @@
     const t = c.getContext('2d');
     t.drawImage(img, 0, 0);
     const pixels = t.getImageData(0, 0, c.width, c.height).data;
+    if (obstaclePaths.includes(path)) masks[path] = { data: pixels, width: c.width, height: c.height };
     let left = c.width, top = c.height, right = -1, bottom = -1;
     for (let y = 0; y < c.height; y++) {
       for (let x = 0; x < c.width; x++) {
@@ -55,7 +61,7 @@
     const img = new Image();
     img.onload = () => {
       images[path] = img;
-      if (asset.items.includes(path) || asset.brush.includes(path) || woodPaths.includes(path)) {
+      if (asset.items.includes(path) || asset.brush.includes(path) || asset.giant.includes(path) || obstaclePaths.includes(path)) {
         try { prepareSprite(path, img); } catch (error) {
           // Some browsers restrict local file pixel reads. Keep the image playable.
           console.warn(`투명도 분석을 생략합니다: ${path}`, error.name);
@@ -95,6 +101,10 @@
     $('distance').textContent = `${Math.floor(distance)} m`;
     $('boost').hidden = boostRemaining <= 0;
     $('boost-time').textContent = `${Math.ceil(boostRemaining)}초`;
+    $('boost').setAttribute('aria-label', `가속 남은 시간 ${Math.ceil(boostRemaining)}초`);
+    $('giant').hidden = giantRemaining <= 0;
+    $('giant-time').textContent = `${Math.ceil(giantRemaining)}초`;
+    $('giant').setAttribute('aria-label', `거대화 남은 시간 ${Math.ceil(giantRemaining)}초`);
   }
   function panel(name) {
     $('overlay').hidden = !name;
@@ -103,18 +113,18 @@
   function start() {
     if (!loaded || $('start').disabled) return;
     score = 0; health = 3; distance = 0; time = 0; runTime = 0;
-    spawnIn = .5; patternIndex = 0; invincible = 0; boostRemaining = 0;
+    spawnIn = .5; patternIndex = 0; invincible = 0; boostRemaining = 0; giantRemaining = 0; visualScale = 1; orangeSequence = 0;
     objects = []; effects = [];
     Object.assign(player, { y: GROUND - player.h, vy: 0, grounded: true, land: 0, jumps: 0 });
-    mode = 'running'; panel(null); $('pause').disabled = false;
+    mode = 'running'; panel(null); canvas.focus({preventScroll:true}); $('pause').disabled = false;
     $('pause').setAttribute('aria-label', '일시 정지');
     hud(); $('status').textContent = '달리기 시작. 체력 3.';
   }
   function pause() {
     if (mode === 'running') {
-      mode = 'paused'; panel('paused'); $('pause').setAttribute('aria-label', '다시 달려보세!');
+      mode = 'paused'; panel('paused'); $('pause').setAttribute('aria-label', '이어하기');
     } else if (mode === 'paused') {
-      mode = 'running'; panel(null); $('pause').setAttribute('aria-label', '일시 정지');
+      mode = 'running'; panel(null); canvas.focus({preventScroll:true}); $('pause').setAttribute('aria-label', '일시 정지');
     }
   }
   function jump() {
@@ -126,7 +136,6 @@
   }
   $('start').addEventListener('click', start);
   $('restart').addEventListener('click', start);
-  $('pause-restart').addEventListener('click', start);
   $('resume').addEventListener('click', pause);
   $('pause').addEventListener('click', pause);
   for (const el of [canvas, $('jump')]) el.addEventListener('pointerdown', e => { e.preventDefault(); jump(); });
@@ -149,27 +158,34 @@
   function spawn() {
     const kind = ['flat', 'single', 'flat', 'double'][patternIndex % 4];
     const anchor = worldWidth + 40;
-    const wood = kind === 'single' ? WOOD_OBSTACLES.low : kind === 'double' ? WOOD_OBSTACLES.high : null;
+    const variants = OBSTACLES.filter(o => o.kind === kind);
+    const descriptor = variants[Math.floor(patternIndex / 4) % variants.length];
     let obstacle = null;
-    if (wood && images[wood.path]) {
-      const img = images[wood.path], h = wood.height, w = h * img.naturalWidth / img.naturalHeight;
-      obstacle = { type: 'obstacle', path: wood.path, x: anchor + SPEED * (kind === 'double' ? .5 : .355) - w / 2, y: GROUND - h, w, h, hit: false, pattern: kind };
+    if (descriptor && images[descriptor.path]) {
+      const img = images[descriptor.path], h = descriptor.height, w = h * img.naturalWidth / img.naturalHeight;
+      obstacle = { type: 'obstacle', path: descriptor.path, core: descriptor.core,
+        x: anchor + SPEED * (kind === 'double' ? .5 : .355) - w / 2,
+        y: GROUND - h, w, h, hit: false, pattern: kind };
       objects.push(obstacle);
     }
     const times = kind === 'double' ? [.13, .23, .37, .49, .61, .74, .88] :
       kind === 'single' ? [.12, .22, .32, .42, .52, .62] : [0, .17, .34, .51, .68, .85];
     for (let i = 0; i < times.length; i++) {
-      const t = times[i], path = asset.items[(patternIndex + i) % asset.items.length];
+      const t = times[i], path = asset.items[orangeSequence % asset.items.length];
       if (!images[path]) continue;
       const centerY = kind === 'flat' ? GROUND - 48 : GROUND + jumpOffset(t, kind === 'double') - player.h / 2;
       const o = { type: 'orange', path, x: anchor + SPEED * t - 18,
         y: Math.max(90, Math.min(GROUND - 38, centerY - 18)), w: 36, h: 36, hit: false, phase: i * .7, pattern: kind };
-      if (!obstacle || !overlap({ ...o, y: o.y - 3, h: o.h + 6 }, obstacle)) objects.push(o);
+      if (!obstacle || !overlap({ ...o, y: o.y - 5, h: o.h + 10 }, obstacle)) { objects.push(o); orangeSequence++; }
     }
     // An occasional, ground-accessible brush, separated from the jump trails.
-    if (kind === 'flat' && patternIndex % 8 === 0 && images[asset.brush[0]]) {
+    if (kind === 'flat' && patternIndex % 12 === 4 && images[asset.brush[0]]) {
       objects.push({ type: 'brush', path: asset.brush[0], x: anchor + SPEED * 1.2 - 19,
         y: GROUND - 80, w: 38, h: 47, hit: false, phase: 0, pattern: kind });
+    }
+    if (kind === 'flat' && patternIndex % 8 === 0 && images[asset.giant[0]]) {
+      objects.push({ type: 'giant', path: asset.giant[0], x: anchor + SPEED * 1.65 - 20,
+        y: GROUND - 80, w: 40, h: 46, hit: false, phase: 0, pattern: kind });
     }
     patternIndex++; spawnIn = 2.9;
   }
@@ -177,14 +193,34 @@
   function spriteRect(o) {
     const img = images[o.path];
     if (!img) return { x: o.x, y: o.y, w: o.w, h: o.h };
-    const scale = Math.min(o.w / img.naturalWidth, o.h / img.naturalHeight);
+    const bounds = o.type === 'obstacle' ? { x:0,y:0,w:1,h:1 } : (alphaBounds[o.path] || {x:0,y:0,w:1,h:1});
+    const scale = Math.min(o.w / (img.naturalWidth * bounds.w), o.h / (img.naturalHeight * bounds.h));
     const w = img.naturalWidth * scale, h = img.naturalHeight * scale;
     const bob = o.type === 'orange' ? Math.sin(time * 3 + o.phase) * 3 : 0;
-    return { x: o.x + (o.w - w) / 2, y: o.y + o.h - h + bob, w, h };
+    return { x: o.x + (o.w - w * bounds.w) / 2 - bounds.x * w,
+      y: o.y + o.h - h * bounds.h - bounds.y * h + bob, w, h };
   }
   function hitRect(o) {
-    const r = spriteRect(o), a = alphaBounds[o.path];
+    const r = spriteRect(o), a = o.core || alphaBounds[o.path];
     return a ? { x: r.x + a.x * r.w, y: r.y + a.y * r.h, w: a.w * r.w, h: a.h * r.h } : r;
+  }
+  function collides(box, o) {
+    const h = hitRect(o);
+    if (!overlap(box, h)) return false;
+    const mask = masks[o.path];
+    if (o.type !== 'obstacle' || !mask) return true;
+    // Exclude decorative branches/tassels via the core, and transparent pixels via alpha.
+    const r = spriteRect(o);
+    const x0 = Math.max(0, Math.floor((Math.max(box.x,h.x)-r.x)/r.w*mask.width));
+    const x1 = Math.min(mask.width-1, Math.ceil((Math.min(box.x+box.w,h.x+h.w)-r.x)/r.w*mask.width));
+    const y0 = Math.max(0, Math.floor((Math.max(box.y,h.y)-r.y)/r.h*mask.height));
+    const y1 = Math.min(mask.height-1, Math.ceil((Math.min(box.y+box.h,h.y+h.h)-r.y)/r.h*mask.height));
+    for(let y=y0;y<=y1;y++) for(let x=x0;x<=x1;x++) if(mask.data[(y*mask.width+x)*4+3]>=96) return true;
+    return false;
+  }
+  function movementFactor() {
+    const t = Math.min(1, boostRemaining / .25);
+    return 1 + (BOOST_FACTOR - 1) * t * t * (3 - 2 * t);
   }
   function collectEffect(amount) {
     const recent = effects.find(e => e.type === 'collect' && e.life > .08);
@@ -195,7 +231,7 @@
     }
   }
   function endGame() {
-    mode = 'over'; boostRemaining = 0; effects = [];
+    mode = 'over'; boostRemaining = 0; giantRemaining = 0; visualScale = 1; effects = [];
     $('pause').disabled = true; $('final-score').textContent = score.toLocaleString('ko-KR');
     panel('result'); $('status').textContent = `게임 오버. 최종 점수 ${score}.`;
   }
@@ -205,6 +241,11 @@
     invincible = Math.max(0, invincible - realDt); player.land = Math.max(0, player.land - realDt);
     boostRemaining = Math.max(0, boostRemaining - realDt);
     if (boostRemaining < 1e-9) boostRemaining = 0;
+    giantRemaining = Math.max(0, giantRemaining - realDt);
+    if (giantRemaining < 1e-9) giantRemaining = 0;
+    const targetScale = giantRemaining > 0 ? 1.5 : 1;
+    visualScale += (targetScale - visualScale) * (1 - Math.exp(-realDt / .08));
+    if (Math.abs(targetScale - visualScale) < .001) visualScale = targetScale;
     distance += SPEED * runDt / 20;
     if (!player.grounded) {
       player.y += player.vy * runDt + .5 * GRAVITY * runDt * runDt; player.vy += GRAVITY * runDt;
@@ -217,12 +258,15 @@
     const box = { x: player.x + 18, y: player.y + 15, w: player.w - 32, h: player.h - 20 };
     for (const o of objects) {
       o.x -= SPEED * runDt;
-      if (o.hit || !overlap(box, hitRect(o))) continue;
+      if (o.hit || !collides(box, o)) continue;
       if (o.type === 'orange') {
         o.hit = true; score += 100; collectEffect(100);
       } else if (o.type === 'brush') {
         o.hit = true; boostRemaining = BOOST_SECONDS;
-        $('status').textContent = '붓 획득. 10초 가속!';
+        $('status').textContent = '붓 획득. 5초 가속!';
+      } else if (o.type === 'giant') {
+        o.hit = true; giantRemaining = GIANT_SECONDS;
+        $('status').textContent = '과거 책 획득. 5초 거대화!';
       } else if (o.type === 'obstacle' && invincible <= 0) {
         o.hit = true; health--; invincible = 1.4;
         $('status').textContent = `장애물 충돌. 체력 ${health}.`;
@@ -236,11 +280,11 @@
   function update(dt) {
     if (mode !== 'running') return;
     // Real-time boost clock and movement clock are separate. Small steps avoid tunnelling
-    // at 459px/s and split exactly at the 10-second expiration boundary.
+    // at 459px/s and split exactly at the 5-second expiration boundary.
     let remaining = dt;
     while (remaining > 1e-9 && mode === 'running') {
-      const factor = boostRemaining > 0 ? BOOST_FACTOR : 1;
-      const step = Math.min(remaining, 1 / 120, boostRemaining > 0 ? boostRemaining : Infinity);
+      const factor = movementFactor();
+      const step = Math.min(remaining, 1 / 120, boostRemaining > 0 ? boostRemaining : Infinity, giantRemaining > 0 ? giantRemaining : Infinity);
       advance(step, factor); remaining -= step;
     }
     hud();
@@ -273,7 +317,7 @@
   }
   function drawObject(o) {
     const r = spriteRect(o);
-    if (o.type === 'orange' || o.type === 'brush') {
+    if (o.type === 'orange' || o.type === 'brush' || o.type === 'giant') {
       const silhouette = silhouettes[o.path];
       if (silhouette) {
         for (const [dx, dy] of [[-1.25, 0], [1.25, 0], [0, -1.25], [0, 1.25], [-.9, -.9], [.9, .9]]) {
@@ -297,7 +341,7 @@
     const index = mode === 'over' ? 6 : invincible > 1.05 ? 5 : !player.grounded ? (player.vy < 0 ? 7 : 0) :
       [0, 1, 2, 3, 4, 8][Math.floor(runTime * 9 * SPEED / 260) % 6];
     const scale = player.land > 0 ? 1 - .06 * Math.sin(player.land / .14 * Math.PI) : 1;
-    const h = player.h * scale, w = player.w * scale;
+    const h = player.h * scale * visualScale, w = player.w * scale * visualScale;
     const blink = mode === 'running' && invincible > 0 && Math.floor(invincible * 11) % 2 ? .45 : 1;
     if (boostRemaining > 0) {
       for (let i = 0; i < 3; i++) {

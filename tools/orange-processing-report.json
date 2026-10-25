@@ -1,0 +1,68 @@
+[
+  {
+    "source": "assets/items/귤1.jpg",
+    "output": "assets/items/귤1.png",
+    "size": [
+      500,
+      527
+    ],
+    "opaque_pixels_unchanged": 139945,
+    "transparent_pixels": 121074,
+    "edge_alpha_zero": true
+  },
+  {
+    "source": "assets/items/귤2.jpg",
+    "output": "assets/items/귤2.png",
+    "size": [
+      504,
+      457
+    ],
+    "opaque_pixels_unchanged": 132442,
+    "transparent_pixels": 95658,
+    "edge_alpha_zero": true
+  },
+  {
+    "source": "assets/items/귤3.jpg",
+    "output": "assets/items/귤3.png",
+    "size": [
+      510,
+      473
+    ],
+    "opaque_pixels_unchanged": 134766,
+    "transparent_pixels": 104085,
+    "edge_alpha_zero": true
+  },
+  {
+    "source": "assets/items/귤4.jpg",
+    "output": "assets/items/귤4.png",
+    "size": [
+      507,
+      476
+    ],
+    "opaque_pixels_unchanged": 71855,
+    "transparent_pixels": 167746,
+    "edge_alpha_zero": true
+  },
+  {
+    "source": "assets/items/귤5.jpg",
+    "output": "assets/items/귤5.png",
+    "size": [
+      492,
+      365
+    ],
+    "opaque_pixels_unchanged": 77463,
+    "transparent_pixels": 100223,
+    "edge_alpha_zero": true
+  },
+  {
+    "source": "assets/items/귤6.jpg",
+    "output": "assets/items/귤6.png",
+    "size": [
+      527,
+      503
+    ],
+    "opaque_pixels_unchanged": 98447,
+    "transparent_pixels": 164391,
+    "edge_alpha_zero": true
+  }
+]
