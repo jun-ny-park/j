@@ -69,3 +69,16 @@ canvas:focus{outline:none}canvas:focus-visible{outline:2px solid #c9a572;outline
 #resume{position:relative;align-self:center;width:82%;padding:10px 16px;border-width:1px;border-radius:999px;box-shadow:0 1px 0 #467c9f;font-size:17.6px;line-height:1.25;white-space:nowrap}
 /* Transparent hit extensions preserve at least 44px without thick visual buttons. */
 #restart::after,#resume::after{content:"";position:absolute;left:50%;top:50%;width:max(100%,44px);height:max(100%,44px);transform:translate(-50%,-50%);background:none}
+
+/* A quiet inline hint between the unchanged story and start button. */
+.start-item-guide{display:flex;align-items:center;justify-content:center;gap:16px;margin:0 0 4px;color:#957b60;font-size:10.5px;font-weight:400;line-height:1.2;white-space:nowrap}
+.start-item-guide>span{display:inline-flex;align-items:center;gap:4px;min-width:0}
+.start-item-guide img{display:block;width:18px;height:18px;object-fit:contain;flex:none}
+@media(max-width:640px){.start-item-guide{gap:10px}}
+@container (max-height:225px){
+  .welcome{padding-top:2px;padding-bottom:2px}
+  .welcome h2{margin-bottom:0}
+  .welcome #overlay-description{margin-top:0;margin-bottom:0;line-height:1.1}
+  .welcome .start-item-guide{margin-bottom:0}
+  .welcome small{margin-top:0}
+}
