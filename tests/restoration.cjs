@@ -1,6 +1,6 @@
 const fs=require('fs'),assert=require('assert/strict'),cp=require('child_process');
 const {chromium}=require('playwright');
-const old=cp.execFileSync('git',['show','0195379:game.js'],{encoding:'utf8'}),current=fs.readFileSync('game.js','utf8'),oldCSS=cp.execFileSync('git',['show','f6aae52:style.css'],{encoding:'utf8'});
+const old=cp.execFileSync('git',['show','0195379:game.js'],{encoding:'utf8'}),current=require('./pattern-fixture.cjs').basic(fs.readFileSync('game.js','utf8')),oldCSS=cp.execFileSync('git',['show','f6aae52:style.css'],{encoding:'utf8'});
 const block=(s,a,b)=>s.slice(s.indexOf(a),s.indexOf(b,s.indexOf(a)));
 for(const [a,b]of [['  function collides(', '  function movementFactor('],['  function smashObstacle(', '  function destructionBox(']])assert.equal(block(current,a,b),block(old,a,b),'normal collision and flight animation unchanged');
 const hook=`window.restoreTest={start,pause,render,endGame,jump,update,frame,

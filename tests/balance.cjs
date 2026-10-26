@@ -1,7 +1,7 @@
 const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
 const {chromium}=require('playwright');
 const file=process.env.BALANCE_SOURCE||path.resolve(__dirname,'../game.js');
-const source=require('./jump-controller.cjs').instrument(fs.readFileSync(file,'utf8')).replace('level.recipes[patternIndex % level.recipes.length].map', '(window.gateRecipe || level.recipes[patternIndex % level.recipes.length]).map').replace(' hud();requestAnimationFrame(frame);',`
+const source=require('./jump-controller.cjs').instrument(fs.readFileSync(file,'utf8')).replace('selection.recipe.map', '(window.gateRecipe || selection.recipe).map').replace(' hud();requestAnimationFrame(frame);',`
 window.balanceTest={start:()=>{start();let seed=12345;Math.random=()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296;};nextBrushAt=18;nextGiantAt=30;},update,jump,pause,spawn,predictTravel,render,
  state:()=>({mode,time,stage:currentStage,score,health,speed:SPEED*movementFactor(),boostRemaining,giantRemaining,player:{...player},objects:objects.map(o=>({...o})),worldWidth}),
  exitSetup:(at,boost,air)=>{start();time=at;currentStage=difficultyAt().index;boostRemaining=boost?5:0;giantRemaining=.01;visualScale=1.5;objects=[];spawnIn=1e6;nextBrushAt=nextGiantAt=1e6;

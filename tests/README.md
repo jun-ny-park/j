@@ -25,6 +25,7 @@ node tests/obstacle-spacing.cjs
 node tests/difficulty.cjs
 node tests/restoration.cjs
 node tests/speed-items.cjs
+node tests/safe-patterns.cjs
 node tests/item-invariant-spacing.cjs
 node tests/boost-jump.cjs
 node tests/performance.cjs
@@ -56,3 +57,5 @@ node tests/background-style.cjs
 `giant-contact.cjs`는 분리된 장애물30쌍의 실제 접촉·5종 투명 영역·실제 동시 접촉·만료 시 선제 파괴 없음·일반 피해 복귀를 검사합니다. `obstacle-spacing.cjs`는 `8fda285`와 360개 생성 상황을 비교해 간격/공통 주기 축소율과 이미지·배열·속도 보존을 측정합니다. `balance.cjs`의 만료 검사는 닿지 않은 물체가 남아 있어야 통과합니다. 착지 시간은 저프레임 관측 프레임이 아니라 실제 착지 후 경과 시간을 사용합니다.
 
 `item-invariant-spacing.cjs`는 `5ed8194` 일반 배치270건과 새 코드가 정확히 일치하는지, 효과 상태1,620건/연속36개 프로필에서 동일 월드 거리로 생성되는지 검사합니다. `boost-jump.cjs`는 승인된 가속 점프의 최고 높이·체공시간·2회 입력·전환 연속성·실제 PC/모바일 입력을 검사합니다. `jump-controller.cjs`는 테스트 응답에만 위상 측정/입력 도우미를 넣습니다. 저프레임 착지와 추가 점프는 실제 프레임 수 대신 수직 시계 위상으로 검사합니다.
+
+`safe-patterns.cjs`는5개 틀의 반복 제한·독립 재시작·아이템 효과 독립성·이전146abbe의 귤 좌표/아이템 자리 재사용·900개 회피/수집 경로와9개 연속 플레이를 검사합니다. 기존 난이도/간격/불변 좌표 테스트는 `pattern-fixture.cjs`로 기본 틀을 고정해 기존 계산 자체를 검증하고, 실제 무작위 변형은 새 테스트 및 balance.cjs에서 별도로 검증합니다. 두 도우미는 테스트 응답에만 적용됩니다.

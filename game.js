@@ -40,6 +40,12 @@
     { start:35, name:'매우 어려움', speed:1.85, recovery:.10, extra:4, recipes:[['single','double','single','double'],['double','single','double'],['single','single','double'],['double','single','single','double'],['single','double','double','single']] },
     { start:50, name:'극한', speed:2.0, recovery:.085, extra:0, recipes:[['single','double','single','double'],['double','single','double','single'],['double','double','single'],['single','single','double','single'],['single','double','double','single']] }
   ];
+  // Recipes still use the existing node coordinates and landing-gap solver.
+  // Item mixing remains the original rare replacement shared by every pattern.
+  const PATTERNS = [
+    {id:'basic',weight:5}, {id:'chain',weight:3}, {id:'tension',weight:3},
+    {id:'bonus',weight:1,quiet:true}, {id:'rest',weight:1,quiet:true}
+  ];
   const SPEED_RAMP_SECONDS = 1.5;
   const SCORE_RAMP_SECONDS = 1.5;
   // Final factors relative to the original 306px/s, never compounded with older stages.
@@ -63,6 +69,45 @@
   let scoreSpeedFrom = 1, scoreSpeedTarget = 1, scoreSpeedStartedAt = 0;
   let nextBrushAt = 14, nextGiantAt = 24;
   let obstacleChoices = { single:0, double:0 };
+  let patternSeed = 1, previousPattern = '', patternRepeat = 0, previousQuiet = false;
+  let previousLayout = '', layoutRepeat = 0;
+  function resetPatternSelection(seed) {
+    patternSeed = (seed ?? (globalThis.crypto?.getRandomValues
+      ? crypto.getRandomValues(new Uint32Array(1))[0] : Date.now() ^ Math.random()*0xffffffff)) >>> 0;
+    previousPattern = ''; patternRepeat = 0; previousQuiet = false;
+    previousLayout = ''; layoutRepeat = 0;
+  }
+  function patternRandom() {
+    let n = patternSeed = (patternSeed+0x6D2B79F5) >>> 0;
+    n = Math.imul(n ^ n >>> 15,n | 1); n ^= n + Math.imul(n ^ n >>> 7,n | 61);
+    return ((n ^ n >>> 14) >>> 0)/4294967296;
+  }
+  function selectPattern(level) {
+    const base=level.recipes[patternIndex % level.recipes.length];
+    const longest=Math.max(...level.recipes.map(r=>r.length));
+    const options=[];
+    for(const p of PATTERNS){
+      if(patternIndex===0 && p.id!=='basic')continue;
+      if((p.id===previousPattern && patternRepeat>=2) || (previousQuiet && p.quiet))continue;
+      const recipes=p.id==='basic'?[base]:p.id==='tension'
+        ?level.recipes.filter(r=>r.length===longest):level.recipes.filter(r=>r.length>=2).map(r=>r.slice(0,2));
+      const variants=recipes.map(recipe=>{
+        const obstacles=recipe.map((_,i)=>p.id!=='bonus' && !(p.id==='rest' && i===1));
+        const signature=recipe.map((kind,i)=>(obstacles[i]?kind:'coin')).join(',');
+        return {id:p.id,recipe,obstacles,signature};
+      }).filter(v=>!(v.signature===previousLayout && layoutRepeat>=2));
+      if(variants.length)options.push({pattern:p,variants});
+    }
+    let roll=patternRandom()*options.reduce((sum,o)=>sum+o.pattern.weight,0);
+    let selected=options.at(-1);
+    for(const o of options){roll-=o.pattern.weight;if(roll<0){selected=o;break;}}
+    const plan=selected.variants[Math.floor(patternRandom()*selected.variants.length)];
+    patternRepeat=plan.id===previousPattern?patternRepeat+1:1;
+    previousPattern=plan.id; previousQuiet=!!selected.pattern.quiet;
+    layoutRepeat=plan.signature===previousLayout?layoutRepeat+1:1;
+    previousLayout=plan.signature;
+    return plan;
+  }
   const hudCache = Object.create(null);
   const collectibleCache = new Map();
   let collectibleScale = 0;
@@ -188,6 +233,7 @@
     flyingObstacles = []; giantIntroRemaining = 0; lastGiantStep = -1;
     last=0;
     scoreSpeedFrom = scoreSpeedTarget = 1; scoreSpeedStartedAt = 0;
+    resetPatternSelection();
     currentStage = 0; nextBrushAt = 14; nextGiantAt = 24; obstacleChoices = {single:0,double:0};
     Object.assign(player, { y: GROUND - player.h, vy: 0, grounded: true, land: 0, jumps: 0 });
     mode = 'running'; panel(null); canvas.focus({preventScroll:true}); $('pause').disabled = false;
@@ -297,14 +343,15 @@
   }
   function spawn() {
     const level = difficultyAt();
-    const recipe = level.recipes[patternIndex % level.recipes.length].map(kind=>kind==='double'&&time<10?'single':kind);
+    const selection = selectPattern(level);
+    const recipe = selection.recipe.map(kind=>kind==='double'&&time<10?'single':kind);
     const baseAnchor=worldWidth+60;
     let anchor=patternIndex===0 ? Math.min(baseAnchor,player.x+player.w/2+SPEED*2) : baseAnchor;
     const nodes=[];
     for(let i=0;i<recipe.length;i++) {
       const kind = recipe[i];
       const lead = kind==='double' ? [.52,.54,.56][(patternIndex+i)%3] : [.33,.36,.39][(patternIndex+i)%3];
-      const node = {kind, lead, center:anchor, patternCenter:anchor};
+      const node = {kind, lead, center:anchor, patternCenter:anchor, obstacle:selection.obstacles[i]};
       if(nodes.length) {
         const previous = nodes.at(-1);
         node.center = previous.center+landingGap(previous,node,level);
@@ -323,7 +370,9 @@
       const obstacle={type:'obstacle',path:descriptor.path,core:descriptor.core,
         x:node.center-w/2,y:GROUND-h,w,h,hit:false,pattern:node.kind,
         lead:node.lead,stage:level.index,group:patternIndex,order:created.length};
-      created.push(obstacle); objects.push(obstacle);
+      // Keep the virtual obstacle for the existing coin exclusion/slot rules.
+      // Bonus/rest only omit its display/collision; coin coordinates do not change.
+      created.push(obstacle); if(node.obstacle) objects.push(obstacle);
     }
     for(const node of nodes) {
       const reaches=arrivalTime(node.patternCenter-(player.x+player.w/2),true);

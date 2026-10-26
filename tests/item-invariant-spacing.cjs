@@ -1,5 +1,5 @@
 const fs=require('fs'),assert=require('assert/strict'),cp=require('child_process'),{chromium}=require('playwright');
-const previous=cp.execFileSync('git',['show','5ed8194:game.js'],{encoding:'utf8'}),current=fs.readFileSync('game.js','utf8');
+const previous=cp.execFileSync('git',['show','5ed8194:game.js'],{encoding:'utf8'}),current=require('./pattern-fixture.cjs').basic(fs.readFileSync('game.js','utf8'));
 const hook=`window.invariant={
  run:(at,index,points,boost=0,giant=0,air=false,pending=false)=>{start();time=at;score=points;syncScoreSpeed();scoreSpeedStartedAt=time-2;patternIndex=index;objects=[];boostRemaining=boost;giantRemaining=giant;visualScale=giant?1.5:1;player.grounded=!air;player.vy=air?200:0;if(typeof giantExitReadyAt!=='undefined')giantExitReadyAt=air?time+.8:0;nextBrushAt=nextGiantAt=Infinity;
  if(pending)objects.push({type:'brush',path:asset.brush[0],x:worldWidth+900,y:380,w:36,h:36,hit:false});const saved=Math.random;Math.random=()=>.9;try{spawn();}finally{Math.random=saved;}return{objects:objects.filter(o=>o.type==='obstacle'||o.type==='orange').map(o=>({...o})),spawnIn,speed:SPEED*movementFactor()};},

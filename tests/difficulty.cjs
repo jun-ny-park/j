@@ -1,6 +1,6 @@
 const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
 const {chromium}=require('playwright');
-const source=require('./jump-controller.cjs').instrument(fs.readFileSync(path.resolve(__dirname,'../game.js'),'utf8')).replace('o.hit = true; o.destroyed = true;', "o.hit = true; o.destroyed = true; if(window.testDestroyed)window.testDestroyed.add(o.group+':'+o.order);").replace(' hud();requestAnimationFrame(frame);',`
+const source=require('./pattern-fixture.cjs').basic(require('./jump-controller.cjs').instrument(fs.readFileSync(path.resolve(__dirname,'../game.js'),'utf8'))).replace('o.hit = true; o.destroyed = true;', "o.hit = true; o.destroyed = true; if(window.testDestroyed)window.testDestroyed.add(o.group+':'+o.order);").replace(' hud();requestAnimationFrame(frame);',`
 window.difficultyTest={
  destroyed:(group,order)=>window.testDestroyed?.has(group+':'+order),
  state:()=>({mode,time,stage:difficultyAt().index,speed:SPEED*movementFactor(),target:difficultyAt().speed,
