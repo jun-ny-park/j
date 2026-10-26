@@ -1,10 +1,10 @@
 const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
 const {chromium}=require('playwright');
-const source=fs.readFileSync(path.resolve(__dirname,'../game.js'),'utf8').replace('o.hit = true; o.destroyed = true;', "o.hit = true; o.destroyed = true; if(window.testDestroyed)window.testDestroyed.add(o.group+':'+o.order);").replace(' hud();requestAnimationFrame(frame);',`
+const source=require('./jump-controller.cjs').instrument(fs.readFileSync(path.resolve(__dirname,'../game.js'),'utf8')).replace('o.hit = true; o.destroyed = true;', "o.hit = true; o.destroyed = true; if(window.testDestroyed)window.testDestroyed.add(o.group+':'+o.order);").replace(' hud();requestAnimationFrame(frame);',`
 window.difficultyTest={
  destroyed:(group,order)=>window.testDestroyed?.has(group+':'+order),
  state:()=>({mode,time,stage:difficultyAt().index,speed:SPEED*movementFactor(),target:difficultyAt().speed,
- boostRemaining,giantRemaining,visualScale,giantExitReadyAt,player:{...player},
+ boostRemaining,giantRemaining,visualScale,player:{...player},
  objects:objects.map(o=>({...o})),worldWidth,cap:viewportSpeedCap,patternIndex,nextBrushAt,nextGiantAt,score,health}),
  stageAt:t=>difficultyAt(t),speedAt:t=>difficultySpeed(t),predictTravel,update,jump,pause,start,render,
  isolated:(at,b=0,g=0)=>{start();time=at;currentStage=difficultyAt().index;objects=[];spawnIn=1e6;boostRemaining=b;giantRemaining=g;},
@@ -25,7 +25,7 @@ window.difficultyTest={
   for(const boundary of [10,20,35,50]){const values=await page.evaluate(t=>[difficultyTest.speedAt(t-.0001),difficultyTest.speedAt(t+.0001),difficultyTest.speedAt(t+1.5)],boundary);assert(Math.abs(values[1]-values[0])<1e-5);assert.equal(values[2],levels.find(l=>l.t===boundary).target);}
   const actualSpeeds=await page.evaluate(()=>[1,12,22,37,52,500].map(t=>{difficultyTest.isolated(t);const base=difficultyTest.state().speed;difficultyTest.isolated(t,5);return{t,base,brush:difficultyTest.state().speed};}));
   for(const [i,r] of actualSpeeds.entries()){assert(Math.abs(r.base-[382.5,443.7,504.9,566.1,612,612][i])<1e-6);assert(Math.abs(r.brush-r.base*1.5)<1e-6);}
-  const physics=await page.evaluate(()=>{const g=difficultyTest,r=[];for(const t of [1,12,22,37,52])for(const b of [0,5]){g.isolated(t,b);g.jump();g.update(.2);const first=g.state().player;g.jump();g.update(.2);const second=g.state().player;r.push({first,second});}return r;});
+  const physics=await page.evaluate(()=>{const g=difficultyTest,r=[];for(const t of [1,12,22,37,52])for(const b of [0,5]){g.isolated(t,b);g.jump();g.update(jumpController.duration(.2));const first=g.state().player;g.jump();g.update(jumpController.duration(.2));const second=g.state().player;r.push({first,second});}return r;});
   for(const r of physics){assert(Math.abs(r.first.y-271)<1e-7);assert(Math.abs(r.second.y-183)<1e-7);assert(Math.abs(r.second.vy+260)<1e-7);}
   const routes=await page.evaluate(()=>{
    const g=difficultyTest,results=[];
@@ -38,14 +38,14 @@ window.difficultyTest={
      if(airborne&&state.player.grounded){airborne=false;lastLanding=state.time-Math.max(0,.14-state.player.land);cursor++;continue;}
      let dt=1/fps;
      if(!airborne){
-      const lead=o.lead-jitter,delta=o.x+o.w/2-(state.player.x+state.player.w/2)-g.predictTravel(lead);
+      const lead=o.lead-jitter,delta=o.x+o.w/2-(state.player.x+state.player.w/2)-jumpController.travel(lead);
       if(delta<=.05){
        if(lastLanding!==null)r.minRecovery=Math.min(r.minRecovery,state.time-lastLanding);
        r.visible&&=o.x<state.worldWidth;g.jump();airborne=true;jumpAt=state.time;second=false;continue;
       }
       dt=Math.min(dt,Math.max(.00005,delta/1200));
      }else if(o.pattern==='double'&&!second){
-      const until=.24-(state.time-jumpAt);
+      const until=jumpController.until(.24);
       if(until<=1e-8){g.jump();second=true;continue;}
       dt=Math.min(dt,until);
      }
@@ -60,7 +60,7 @@ window.difficultyTest={
    for(const [stage,at]of [[0,9.7],[1,19.7],[2,34.7],[3,49.7]])for(const jitter of [-.03,0,.03])for(const boost of [false,true])results.push(route(stage,0,boost,false,60,jitter,at));
    return results;
   });
-  for(const r of routes){assert.equal(r.health,3,JSON.stringify(r));assert(r.finished,JSON.stringify(r));if(r.minRecovery!==null)assert(r.minRecovery>=.085-1e-3,JSON.stringify(r));}
+  for(const r of routes){assert.equal(r.health,3,JSON.stringify(r));assert(r.finished,JSON.stringify(r));if(r.minRecovery!==null)assert(r.minRecovery>=.085/(r.boost?1.5:1)-1e-3,JSON.stringify(r));}
   const paths=new Set(routes.flatMap(r=>r.paths));assert.deepEqual([...paths].sort(),[1,2,6,7,9].map(n=>`assets/obstacles/기타이미지${n}.png`).sort());
   assert(routes.filter(r=>r.stage===0).every(r=>r.paths.every(p=>/기타이미지[12]\.png$/.test(p))));
   const rare=await page.evaluate(()=>difficultyTest.rareSeries());for(const type of ['brush','giant']){const events=rare.filter(e=>e.type===type);for(let i=1;i<events.length;i++)assert(events[i].t-events[i-1].t>=(type==='brush'?36:48));}
@@ -83,10 +83,10 @@ window.difficultyTest={
      if(!airborne)target=state.objects.filter(o=>o.type==='obstacle'&&!passed.has(o.group+':'+o.order)).sort((a,b)=>(a.x+a.w/2)-(b.x+b.w/2))[0];
      let dt=1/30;
      if(!airborne&&target){
-      const delta=target.x+target.w/2-(state.player.x+state.player.w/2)-g.predictTravel(target.lead);
+      const delta=target.x+target.w/2-(state.player.x+state.player.w/2)-jumpController.travel(target.lead);
       if(delta<=.05){if(lastLanding!==null){minRecovery=Math.min(minRecovery,state.time-lastLanding);if(state.time-lastLanding<.085)window.recoveryDiagnostics.push({time:state.time,lastLanding,target,giant:state.giantRemaining,boost:state.boostRemaining,player:state.player,objects:state.objects.filter(o=>o.type==='obstacle')});}minVisible=Math.min(minVisible,(state.worldWidth-target.x)/state.speed);g.jump();airborne=true;jumpAt=state.time;second=false;jumps++;continue;}
       dt=Math.min(dt,Math.max(.00005,delta/1200));
-     }else if(airborne&&target.pattern==='double'&&!second){const until=.24-(state.time-jumpAt);if(until<=1e-8){g.jump();second=true;continue;}dt=Math.min(dt,until);}
+     }else if(airborne&&target.pattern==='double'&&!second){const until=jumpController.until(.24);if(until<=1e-8){g.jump();second=true;continue;}dt=Math.min(dt,until);}
      g.update(dt);
     }
     const state=g.state();return {width:state.worldWidth,health:state.health,time:state.time,stage:state.stage,jumps,minRecovery,minVisible,score:state.score,recoveryDiagnostics:window.recoveryDiagnostics};
@@ -94,7 +94,7 @@ window.difficultyTest={
    const shotDir=path.resolve(__dirname,'../work/validation');fs.mkdirSync(shotDir,{recursive:true});for(const shot of await active.evaluate(()=>window.fastCaptures||[]))fs.writeFileSync(path.join(shotDir,`fast-${viewport.width}x${viewport.height}-${shot.at}s.png`),Buffer.from(shot.data.split(',')[1],'base64'));
    if(mobileContext)await mobileContext.close();
   }
-  for(const run of continuous){assert.equal(run.health,3,JSON.stringify(run));assert(run.time>=185);assert.equal(run.stage,4);assert(run.minRecovery>=.085-1e-3,JSON.stringify(run));assert(run.minVisible>=.075,JSON.stringify(run));}
+  for(const run of continuous){assert.equal(run.health,3,JSON.stringify(run));assert(run.time>=185);assert.equal(run.stage,4);assert(run.minRecovery>=.085/1.5-1e-3,JSON.stringify(run));assert(run.minVisible>=.075,JSON.stringify(run));}
   const output=path.resolve(__dirname,'../work/validation');fs.mkdirSync(output,{recursive:true});await page.evaluate(()=>{difficultyTest.pattern(4,0);difficultyTest.render();difficultyTest.pause();});await page.screenshot({path:path.join(output,'difficulty-expert.png')});
   assert.deepEqual(errors,[]);
   console.log(JSON.stringify({result:'PASS',routes:routes.length,obstacles:routes.reduce((n,r)=>n+r.nodes,0),continuous,minLandingRecovery:Math.min(...routes.filter(r=>r.minRecovery!==null).map(r=>r.minRecovery)),levels,actualSpeeds,caps,rareItems:rare,checks:['fixed real-time jump physics','five stages and smooth ramps','all recipes normal/boost/giant/both at 15/60/120fps','stage-boundary and input jitter routes','no impossible collisions','landing room','real-time rare-item cooldowns','pause freezes difficulty/effects','restart resets stage','speed cap','no JavaScript errors']}));

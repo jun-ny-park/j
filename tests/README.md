@@ -25,6 +25,8 @@ node tests/obstacle-spacing.cjs
 node tests/difficulty.cjs
 node tests/restoration.cjs
 node tests/speed-items.cjs
+node tests/item-invariant-spacing.cjs
+node tests/boost-jump.cjs
 node tests/performance.cjs
 node tests/balance.cjs
 node tests/backgrounds.cjs
@@ -52,3 +54,5 @@ node tests/background-style.cjs
 `speed-items.cjs`는 효과 전후 귤의 고정 월드 간격, 긴 특수 아이템 휴식 제거, 점수 배율과 보간, 고속 회피 및 모바일 가로 제목 두 줄을 검사합니다.
 
 `giant-contact.cjs`는 분리된 장애물30쌍의 실제 접촉·5종 투명 영역·실제 동시 접촉·만료 시 선제 파괴 없음·일반 피해 복귀를 검사합니다. `obstacle-spacing.cjs`는 `8fda285`와 360개 생성 상황을 비교해 간격/공통 주기 축소율과 이미지·배열·속도 보존을 측정합니다. `balance.cjs`의 만료 검사는 닿지 않은 물체가 남아 있어야 통과합니다. 착지 시간은 저프레임 관측 프레임이 아니라 실제 착지 후 경과 시간을 사용합니다.
+
+`item-invariant-spacing.cjs`는 `5ed8194` 일반 배치270건과 새 코드가 정확히 일치하는지, 효과 상태1,620건/연속36개 프로필에서 동일 월드 거리로 생성되는지 검사합니다. `boost-jump.cjs`는 승인된 가속 점프의 최고 높이·체공시간·2회 입력·전환 연속성·실제 PC/모바일 입력을 검사합니다. `jump-controller.cjs`는 테스트 응답에만 위상 측정/입력 도우미를 넣습니다. 저프레임 착지와 추가 점프는 실제 프레임 수 대신 수직 시계 위상으로 검사합니다.

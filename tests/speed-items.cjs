@@ -1,5 +1,5 @@
 const fs=require('fs'),assert=require('assert/strict');const {chromium}=require('playwright');
-const source=fs.readFileSync('game.js','utf8').replace('o.hit=true; boostRemaining=BOOST_SECONDS;',"o.hit=true; boostRemaining=BOOST_SECONDS;window.actualPickups.push('brush');").replace('o.hit=true; giantRemaining=GIANT_SECONDS;',"o.hit=true; giantRemaining=GIANT_SECONDS;window.actualPickups.push('giant');").replace(' hud();requestAnimationFrame(frame);',`
+const source=require('./jump-controller.cjs').instrument(fs.readFileSync('game.js','utf8')).replace('o.hit=true; boostRemaining=BOOST_SECONDS;',"o.hit=true; boostRemaining=BOOST_SECONDS;window.actualPickups.push('brush');").replace('o.hit=true; giantRemaining=GIANT_SECONDS;',"o.hit=true; giantRemaining=GIANT_SECONDS;window.actualPickups.push('giant');").replace(' hud();requestAnimationFrame(frame);',`
 window.speedItems={start,jump,pause,update,render,endGame,predictTravel,
  state:()=>({mode,time,score,health,boostRemaining,giantRemaining,distance,speed:SPEED*movementFactor(),scoreFactor:scoreSpeed(),target:scoreSpeedTarget,picked:[...(window.actualPickups||[])],spawnIn,patternIndex,objects:objects.map(o=>({...o})),flights:flyingObstacles.map(o=>({...o})),player:{...player}}),
  setup:(at=52,points=0,boost=0,giant=0)=>{start();window.actualPickups=[];time=at;score=points;syncScoreSpeed();scoreSpeedStartedAt=time-2;boostRemaining=boost;giantRemaining=giant;visualScale=giant?1.5:1;objects=[];spawnIn=1e6;nextBrushAt=nextGiantAt=Infinity;},
@@ -24,19 +24,19 @@ window.speedItems={start,jump,pause,update,render,endGame,predictTravel,
  const routes=await p.evaluate(()=>{const g=speedItems,out=[];for(const at of [1,12,22,37,52])for(const points of [0,5000,10000])for(const boost of [0,5])for(const fps of [15,60,120])for(let index=0;index<g.recipes()[[1,12,22,37,52].indexOf(at)]*3;index++){
   const initial=g.pattern(at,index,points,boost).filter(o=>o.type==='obstacle');let cursor=0,air=false,second=false,jumpAt=0,steps=0,minRecovery=Infinity,lastLand=null;
   while(cursor<initial.length&&steps++<20000){const s=g.state();if(s.health<3)break;const o=s.objects.find(o=>o.type==='obstacle'&&o.order===cursor)||(air?initial[cursor]:null);if(!o)throw Error('missing obstacle '+JSON.stringify({at,points,boost,index,cursor,state:s}));if(air&&s.player.grounded){air=false;lastLand=s.time-Math.max(0,.14-s.player.land);cursor++;continue;}let dt=1/fps;
-   if(!air){const dx=o.x+o.w/2-(s.player.x+s.player.w/2)-g.predictTravel(o.lead);if(dx<=.05){if(lastLand!==null)minRecovery=Math.min(minRecovery,s.time-lastLand);g.jump();air=true;second=false;jumpAt=s.time;continue;}dt=Math.min(dt,Math.max(.00003,dx/1200));}
-   else if(o.pattern==='double'&&!second){const left=.24-(s.time-jumpAt);if(left<=1e-8){g.jump();second=true;continue;}dt=Math.min(dt,left);}
+   if(!air){const dx=o.x+o.w/2-(s.player.x+s.player.w/2)-jumpController.travel(o.lead);if(dx<=.05){if(lastLand!==null)minRecovery=Math.min(minRecovery,s.time-lastLand);g.jump();air=true;second=false;jumpAt=s.time;continue;}dt=Math.min(dt,Math.max(.00003,dx/1200));}
+   else if(o.pattern==='double'&&!second){const left=jumpController.until(.24);if(left<=1e-8){g.jump();second=true;continue;}dt=Math.min(dt,left);}
    g.update(dt);
   }out.push({at,points,boost,fps,index,health:g.state().health,finished:cursor===initial.length,minRecovery:Number.isFinite(minRecovery)?minRecovery:null});
- }return out;});for(const r of routes){assert.equal(r.health,3,JSON.stringify(r));assert(r.finished,JSON.stringify(r));assert(r.minRecovery===null||r.minRecovery>=.085-.001,JSON.stringify(r));}
+ }return out;});for(const r of routes){assert.equal(r.health,3,JSON.stringify(r));assert(r.finished,JSON.stringify(r));assert(r.minRecovery===null||r.minRecovery>=.085/(r.boost?1.5:1)-.001,JSON.stringify(r));}
  const pickupRoutes=await p.evaluate(()=>{const g=speedItems,out=[];for(const points of [0,5000,10000])for(const boost of [0,5])for(const type of ['brush','giant'])for(let index=0;index<5;index++){
   let result=null;
   for(const jitter of [0,-.03,.03,-.06,.06,-.10,.10]){
    const all=g.pattern(52,index,points,boost,0,true,.1,type==='brush'?.1:.8),special=all.find(o=>o.type===type);if(!special){result={points,boost,type,index,skipped:true};break;}
    const initial=all.filter(o=>o.type==='obstacle');let cursor=0,air=false,second=false,jumpAt=0,steps=0;
    while(cursor<initial.length&&steps++<20000){const s=g.state();if(s.health<3)break;if(air&&s.player.grounded){air=false;cursor++;continue;}const o=s.objects.find(o=>o.type==='obstacle'&&o.order===cursor)||(air?initial[cursor]:null);if(!o){cursor++;continue;}let dt=1/120;
-    if(!air){const lead=o.lead+jitter,dx=o.x+o.w/2-(s.player.x+s.player.w/2)-g.predictTravel(lead);if(dx<=.05){g.jump();air=true;second=false;jumpAt=s.time;continue;}dt=Math.min(dt,Math.max(.00003,dx/1200));}
-    else if(o.pattern==='double'&&!second){const left=.24-(s.time-jumpAt);if(left<=1e-8){g.jump();second=true;continue;}dt=Math.min(dt,left);}
+    if(!air){const lead=o.lead+jitter,dx=o.x+o.w/2-(s.player.x+s.player.w/2)-jumpController.travel(lead);if(dx<=.05){g.jump();air=true;second=false;jumpAt=s.time;continue;}dt=Math.min(dt,Math.max(.00003,dx/1200));}
+    else if(o.pattern==='double'&&!second){const left=jumpController.until(.24);if(left<=1e-8){g.jump();second=true;continue;}dt=Math.min(dt,left);}
     g.update(dt);
    }
    const state=g.state();result={points,boost,type,index,jitter,health:state.health,collected:state.picked.includes(type),finished:cursor===initial.length};if(result.health===3&&result.collected&&result.finished)break;

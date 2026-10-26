@@ -62,7 +62,6 @@
   let currentStage = 0;
   let scoreSpeedFrom = 1, scoreSpeedTarget = 1, scoreSpeedStartedAt = 0;
   let nextBrushAt = 14, nextGiantAt = 24;
-  let giantExitReadyAt = 0;
   let obstacleChoices = { single:0, double:0 };
   const hudCache = Object.create(null);
   const collectibleCache = new Map();
@@ -189,7 +188,7 @@
     flyingObstacles = []; giantIntroRemaining = 0; lastGiantStep = -1;
     last=0;
     scoreSpeedFrom = scoreSpeedTarget = 1; scoreSpeedStartedAt = 0;
-    currentStage = 0; nextBrushAt = 14; nextGiantAt = 24; giantExitReadyAt = 0; obstacleChoices = {single:0,double:0};
+    currentStage = 0; nextBrushAt = 14; nextGiantAt = 24; obstacleChoices = {single:0,double:0};
     Object.assign(player, { y: GROUND - player.h, vy: 0, grounded: true, land: 0, jumps: 0 });
     mode = 'running'; panel(null); canvas.focus({preventScroll:true}); $('pause').disabled = false;
     $('pause').setAttribute('aria-label', '일시 정지');
@@ -256,6 +255,11 @@
     const t = Math.max(0, Math.min(1, remaining/.25));
     return 1 + (BOOST_FACTOR-1)*t*t*(3-2*t);
   }
+  function jumpRate(remaining = boostRemaining, at = time) {
+    const base = SPEED*difficultySpeed(at)*scoreSpeed(at);
+    const normal = Math.min(viewportSpeedCap,base);
+    return normal > 0 ? Math.min(viewportSpeedCap,base*brushFactor(remaining))/normal : 1;
+  }
   function predictTravel(seconds, at = time, boost = boostRemaining, pointsFactor = null) {
     const steps = Math.max(1, Math.ceil(seconds/.02)), dt = seconds/steps;
     let travel = 0;
@@ -278,21 +282,16 @@
     const minSpeed=Math.min(viewportSpeedCap,SPEED*difficultySpeed()*(patternOnly?1:scoreSpeed()));
     const approach=Math.max(0,(previous.center??worldWidth+60)-(player.x+player.w/2))/minSpeed;
     const horizon=approach+flight+level.recovery+next.lead+.15;
-    // Uncollected brushes can change speed before this group arrives. New brushes
-    // replace existing slots in the final arc, never an earlier jump in the group.
-    const mayBoost=!patternOnly && (boostRemaining>0 || objects.some(o=>o.type==='brush'&&!o.hit));
     // Reserve only reachable score milestones in the queued coins plus this
     // existing group (at most four six-coin arcs). No new obstacle recipe.
     const queuedPoints=objects.reduce((sum,o)=>sum+(o.type==='orange'&&!o.hit?100:0),0);
     const possibleScoreFactor=patternOnly?1:scoreFactorFor(score+queuedPoints+24*100);
-    const maxSpeed=Math.min(viewportSpeedCap,SPEED*difficultySpeed(time+horizon)*Math.max(patternOnly?1:scoreSpeed(time+horizon),possibleScoreFactor)*(mayBoost?BOOST_FACTOR:1));
+    const maxSpeed=Math.min(viewportSpeedCap,SPEED*difficultySpeed(time+horizon)*Math.max(patternOnly?1:scoreSpeed(time+horizon),possibleScoreFactor));
     const original=maxSpeed*(flight+level.recovery+next.lead)-minSpeed*previous.lead+SPACING_MARGIN+level.extra;
     if(patternOnly)return original; // Keep the existing internal collectible shape.
-    // Never shorten below a complete jump, a grounded recovery, and the next
-    // approach. A known brush that lasts through the whole approach also covers
-    // the previous lead; otherwise use the conservative unboosted lower bound.
-    const guaranteedBrush=brushFactor(Math.max(0,boostRemaining-approach-previous.lead));
-    const leadSpeed=Math.min(viewportSpeedCap,minSpeed*guaranteedBrush);
+    // Obstacle geometry is a baseline world-distance rule. Item state, item
+    // expiry and uncollected brushes must never expand or reschedule it.
+    const leadSpeed=minSpeed;
     const physicalMinimum=maxSpeed*(flight+MIN_LANDING_RECOVERY+next.lead)-leadSpeed*previous.lead+18;
     return Math.max(original*OBSTACLE_GAP_FACTOR,physicalMinimum);
   }
@@ -301,9 +300,6 @@
     const recipe = level.recipes[patternIndex % level.recipes.length].map(kind=>kind==='double'&&time<10?'single':kind);
     const baseAnchor=worldWidth+60;
     let anchor=patternIndex===0 ? Math.min(baseAnchor,player.x+player.w/2+SPEED*2) : baseAnchor;
-    // Only an unfinished airborne landing needs the existing minimum approach
-    // distance at giant expiry. Spawning itself never stops or resets.
-    if(!player.grounded && giantExitReadyAt>time) anchor=Math.max(anchor,player.x+player.w/2+predictTravel(giantExitReadyAt-time+.56)+80);
     const nodes=[];
     for(let i=0;i<recipe.length;i++) {
       const kind = recipe[i];
@@ -365,7 +361,7 @@
       if (type === 'brush') nextBrushAt = time + 36;
       else nextGiantAt = time + 48;
     }
-    // Include a newly replaced brush in the ordinary physics safety spacing.
+    // The same baseline world-distance spacing applies before/after a pickup.
     const after=lastNode.kind==='flat' ? 1000+level.extra : landingGap(lastNode,{lead:.56},level);
     patternIndex++;
     spawnIn=(lastNode.center-anchor+after+Math.max(0,anchor-baseAnchor))/SPEED;
@@ -412,7 +408,7 @@
   }
   function endGame() {
     mode = 'over'; boostRemaining = 0; giantRemaining = 0; visualScale = 1; effects = [];
-    flyingObstacles = []; giantIntroRemaining = 0; lastGiantStep = -1; giantExitReadyAt=0;
+    flyingObstacles = []; giantIntroRemaining = 0; lastGiantStep = -1;
     $('pause').disabled = true;
     const resultText = `${score.toLocaleString('ko-KR')}점`;
     $('final-score').textContent = resultText;
@@ -457,15 +453,9 @@
     }
     return false;
   }
-  function secureGiantExit() {
-    const feet=player.y+player.h-GROUND;
-    const landing=player.grounded?0:Math.max(0,(-player.vy+Math.sqrt(player.vy**2-2*GRAVITY*feet))/GRAVITY);
-    const settle=landing+Math.max(.18,difficultyAt().recovery);
-    giantExitReadyAt=time+settle;
-  }
   function advance(realDt, factor) {
     const runDt = realDt * factor;
-    const giantWasActive=giantRemaining>0;
+    const jumpDt = realDt * jumpRate();
     for (const f of flyingObstacles) f.age += realDt;
     flyingObstacles = flyingObstacles.filter(f=>f.age<f.duration-1e-9);
     for (const e of effects) { e.life -= realDt; e.y -= realDt * (e.type==='collect'?22:0); }
@@ -483,13 +473,22 @@
     if (Math.abs(targetScale - visualScale) < .001) visualScale = targetScale;
     distance += SPEED * runDt / 20;
     if (!player.grounded) {
-      player.y += player.vy * realDt + .5 * GRAVITY * realDt * realDt; player.vy += GRAVITY * realDt;
+      player.y += player.vy * jumpDt + .5 * GRAVITY * jumpDt * jumpDt; player.vy += GRAVITY * jumpDt;
     }
     if (player.y + player.h >= GROUND) {
       if (!player.grounded) player.land = .14;
       player.y = GROUND - player.h; player.vy = 0; player.grounded = true; player.jumps = 0;
     }
-    spawnIn -= runDt; if (spawnIn <= 0) spawn();
+    // spawnIn is remaining distance / SPEED, not a wall-clock cooldown.
+    // Decrement by exactly the same travel as every moving object.
+    spawnIn -= runDt;
+    if (spawnIn <= 0) {
+      const remainder=spawnIn, firstNew=objects.length;
+      spawn();
+      spawnIn+=remainder; // Preserve distance crossed beyond the scheduled point.
+      const beforeSpawn=runDt+remainder;
+      for(let i=firstNew;i<objects.length;i++)objects[i].x+=SPEED*beforeSpawn;
+    }
     const damageBox = { x: player.x + 18, y: player.y + 15, w: player.w - 32, h: player.h - 20 };
     const pickupBox = collectionBox();
     for (const o of objects) o.x -= SPEED * runDt;
@@ -506,8 +505,6 @@
         $('status').textContent='과거 책 획득. 5초 거대화!';
       }
     }
-    // Keep only the remaining landing time; expiry never destroys nearby objects.
-    if(giantWasActive && giantRemaining===0) secureGiantExit();
     const giantBox=giantRemaining>0?destructionBox():null;
     for (const o of objects) {
       if (o.type!=='obstacle' || (o.hit && giantRemaining<=0) || o.destroyed || !(giantRemaining>0 ? giantTouches(o,giantBox) : collides(damageBox,o))) continue;
@@ -534,7 +531,8 @@
     if (mode !== 'running') return;
     // Real-time boost clock and movement clock are separate. Small steps avoid tunnelling
     // up to MAX_SPEED and split exactly at item expiration boundaries.
-    // Vertical physics always uses realDt, independent of either speed multiplier.
+    // Only brush acceleration compresses the jump clock; score/time keep their
+    // original physics. Heights and the two-input limit remain unchanged.
     let remaining = dt;
     while (remaining > 1e-9 && mode === 'running') {
       const factor = movementFactor();
