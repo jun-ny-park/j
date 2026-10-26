@@ -91,3 +91,8 @@ canvas:focus{outline:none}canvas:focus-visible{outline:2px solid #c9a572;outline
 #pause:hover{transform:translateY(-50%);filter:brightness(1.05)}
 @media(max-width:640px){.hud{--pause-width:31px;--pause-gap:5px}}
 @media(hover:none) and (pointer:coarse) and (max-width:1024px){.hud{--pause-width:31px;--pause-gap:8px}}
+
+/* Physical mobile landscape only; PC and CSS-rotated portrait keep their layout. */
+@media (hover:none) and (pointer:coarse) and (max-width:1024px) and (orientation:landscape){
+  .intro{flex-direction:column;gap:2px;min-height:0}
+}

@@ -22,6 +22,7 @@ node tests/collection.cjs
 node tests/giant-smash.cjs
 node tests/difficulty.cjs
 node tests/restoration.cjs
+node tests/speed-items.cjs
 node tests/performance.cjs
 node tests/balance.cjs
 node tests/backgrounds.cjs
@@ -45,3 +46,5 @@ node tests/background-style.cjs
 `pause-image.cjs`는 PNG 실제 포맷·알파·원본 크기·불투명 RGB 일치·꽃잎/하이라이트 보존·외곽 체크무늬 투명을 검사합니다. `background-style.cjs`는 1.25px/93%/93% 기본 설정과 DPR별 강도, 모든 전경의 filter=none 및 불투명한 반복 경계를 검사합니다.
 
 `restoration.cjs`는 기존 배치와의 좌표 일치·귤 자리 대체·멈춤 토글·두루마리 85% 축소를 검증합니다. `performance.cjs`는 `0195379`의 코드와 캐시 구현을 같은 장면으로 비교하므로 해당 커밋을 포함한 Git 기록이 필요합니다. 벤치마크는 픽셀 읽기를 강제한 비용이며 실제 FPS 측정이 아닙니다.
+
+`speed-items.cjs`는 효과 전후 귤의 고정 월드 간격, 긴 특수 아이템 휴식 제거, 점수 배율과 보간, 고속 회피 및 모바일 가로 제목 두 줄을 검사합니다.

@@ -41,8 +41,9 @@
     { start:50, name:'극한', speed:2.0, recovery:.085, extra:0, recipes:[['single','double','single','double'],['double','single','double','single'],['double','double','single'],['single','single','double','single'],['single','double','double','single']] }
   ];
   const SPEED_RAMP_SECONDS = 1.5;
+  const SCORE_RAMP_SECONDS = 1.5;
   // Final factors relative to the original 306px/s, never compounded with older stages.
-  const MAX_SPEED = SPEED * 2.5; // Brush safety cap: 765px/s rather than 918px/s.
+  const MAX_SPEED = SPEED * 2 * 1.30 * 1.5; // Maximum time × score × brush; applied once.
   const SPACING_MARGIN = 48; // body alignment plus approximately 30ms input slack
   const SINGLE_FLIGHT = 2 * FIRST_JUMP / GRAVITY;
   const SECOND_AT = .24;
@@ -57,6 +58,7 @@
   let canvasPixelRatio = 1, viewportSpeedCap = MAX_SPEED;
   let flyingObstacles = [], giantIntroRemaining = 0, lastGiantStep = -1;
   let currentStage = 0;
+  let scoreSpeedFrom = 1, scoreSpeedTarget = 1, scoreSpeedStartedAt = 0;
   let nextBrushAt = 14, nextGiantAt = 24;
   let giantExitReadyAt = 0;
   let obstacleChoices = { single:0, double:0 };
@@ -184,6 +186,7 @@
     objects = []; effects = [];
     flyingObstacles = []; giantIntroRemaining = 0; lastGiantStep = -1;
     last=0;
+    scoreSpeedFrom = scoreSpeedTarget = 1; scoreSpeedStartedAt = 0;
     currentStage = 0; nextBrushAt = 14; nextGiantAt = 24; giantExitReadyAt = 0; obstacleChoices = {single:0,double:0};
     Object.assign(player, { y: GROUND - player.h, vy: 0, grounded: true, land: 0, jumps: 0 });
     mode = 'running'; panel(null); canvas.focus({preventScroll:true}); $('pause').disabled = false;
@@ -237,36 +240,50 @@
     const t = Math.max(0, Math.min(1, (at-level.start)/SPEED_RAMP_SECONDS));
     return DIFFICULTY[level.index-1].speed + (level.speed-DIFFICULTY[level.index-1].speed)*t*t*(3-2*t);
   }
+  function scoreFactorFor(points) { return points >= 10000 ? 1.30 : points >= 5000 ? 1.15 : 1; }
+  function scoreSpeed(at = time) {
+    const t = Math.max(0, Math.min(1, (at-scoreSpeedStartedAt)/SCORE_RAMP_SECONDS));
+    return scoreSpeedFrom + (scoreSpeedTarget-scoreSpeedFrom)*t*t*(3-2*t);
+  }
+  function syncScoreSpeed() {
+    const target = scoreFactorFor(score);
+    if (target === scoreSpeedTarget) return;
+    scoreSpeedFrom = scoreSpeed(); scoreSpeedTarget = target; scoreSpeedStartedAt = time;
+  }
   function brushFactor(remaining = boostRemaining) {
     const t = Math.max(0, Math.min(1, remaining/.25));
     return 1 + (BOOST_FACTOR-1)*t*t*(3-2*t);
   }
-  function predictTravel(seconds, at = time, boost = boostRemaining) {
+  function predictTravel(seconds, at = time, boost = boostRemaining, pointsFactor = null) {
     const steps = Math.max(1, Math.ceil(seconds/.02)), dt = seconds/steps;
     let travel = 0;
     for(let i=0;i<steps;i++) {
       const t=(i+.5)*dt;
-      travel += Math.min(viewportSpeedCap,SPEED*difficultySpeed(at+t)*brushFactor(Math.max(0,boost-t)))*dt;
+      travel += Math.min(viewportSpeedCap,SPEED*difficultySpeed(at+t)*(pointsFactor ?? scoreSpeed(at+t))*brushFactor(Math.max(0,boost-t)))*dt;
     }
     return travel;
   }
-  function arrivalTime(pixels) {
+  function arrivalTime(pixels, patternOnly = false) {
     let low=0, high=Math.max(0,pixels)/SPEED+1;
     for(let i=0;i<20;i++) {
       const mid=(low+high)/2;
-      if(predictTravel(mid)<pixels) low=mid; else high=mid;
+      if((patternOnly ? predictTravel(mid,time,0,1) : predictTravel(mid))<pixels) low=mid; else high=mid;
     }
     return (low+high)/2;
   }
-  function landingGap(previous, next, level) {
+  function landingGap(previous, next, level, patternOnly = false) {
     const flight=previous.kind==='double'?DOUBLE_FLIGHT:SINGLE_FLIGHT;
-    const minSpeed=Math.min(viewportSpeedCap,SPEED*difficultySpeed());
+    const minSpeed=Math.min(viewportSpeedCap,SPEED*difficultySpeed()*(patternOnly?1:scoreSpeed()));
     const approach=Math.max(0,(previous.center??worldWidth+60)-(player.x+player.w/2))/minSpeed;
     const horizon=approach+flight+level.recovery+next.lead+.15;
     // Uncollected brushes can change speed before this group arrives. New brushes
     // replace existing slots in the final arc, never an earlier jump in the group.
-    const mayBoost=boostRemaining>0 || objects.some(o=>o.type==='brush'&&!o.hit);
-    const maxSpeed=Math.min(viewportSpeedCap,SPEED*difficultySpeed(time+horizon)*(mayBoost?BOOST_FACTOR:1));
+    const mayBoost=!patternOnly && (boostRemaining>0 || objects.some(o=>o.type==='brush'&&!o.hit));
+    // Reserve only reachable score milestones in the queued coins plus this
+    // existing group (at most four six-coin arcs). No new obstacle recipe.
+    const queuedPoints=objects.reduce((sum,o)=>sum+(o.type==='orange'&&!o.hit?100:0),0);
+    const possibleScoreFactor=patternOnly?1:scoreFactorFor(score+queuedPoints+24*100);
+    const maxSpeed=Math.min(viewportSpeedCap,SPEED*difficultySpeed(time+horizon)*Math.max(patternOnly?1:scoreSpeed(time+horizon),possibleScoreFactor)*(mayBoost?BOOST_FACTOR:1));
     return maxSpeed*(flight+level.recovery+next.lead)-minSpeed*previous.lead+SPACING_MARGIN+level.extra;
   }
   function spawn() {
@@ -274,15 +291,18 @@
     const recipe = level.recipes[patternIndex % level.recipes.length].map(kind=>kind==='double'&&time<10?'single':kind);
     const baseAnchor=worldWidth+60;
     let anchor=patternIndex===0 ? Math.min(baseAnchor,player.x+player.w/2+SPEED*2) : baseAnchor;
-    if(giantExitReadyAt>time) anchor=Math.max(anchor,player.x+player.w/2+predictTravel(giantExitReadyAt-time+.56)+80);
+    // Only an unfinished airborne landing needs the existing minimum approach
+    // distance at giant expiry. Spawning itself never stops or resets.
+    if(!player.grounded && giantExitReadyAt>time) anchor=Math.max(anchor,player.x+player.w/2+predictTravel(giantExitReadyAt-time+.56)+80);
     const nodes=[];
     for(let i=0;i<recipe.length;i++) {
       const kind = recipe[i];
       const lead = kind==='double' ? [.52,.54,.56][(patternIndex+i)%3] : [.33,.36,.39][(patternIndex+i)%3];
-      const node = {kind, lead, center:anchor};
+      const node = {kind, lead, center:anchor, patternCenter:anchor};
       if(nodes.length) {
         const previous = nodes.at(-1);
         node.center = previous.center+landingGap(previous,node,level);
+        node.patternCenter = previous.patternCenter+landingGap({...previous,center:previous.patternCenter},node,level,true);
       }
       nodes.push(node);
     }
@@ -300,15 +320,16 @@
       created.push(obstacle); objects.push(obstacle);
     }
     for(const node of nodes) {
-      const reaches=arrivalTime(node.center-(player.x+player.w/2));
+      const reaches=arrivalTime(node.patternCenter-(player.x+player.w/2),true);
       const jumpAt=Math.max(0,reaches-node.lead);
-      const at=time+jumpAt, boost=Math.max(0,boostRemaining-jumpAt);
-      const approach=predictTravel(node.lead,at,boost);
+      const at=time+jumpAt;
+      // Fixed world spacing: only the original time-based speed shapes the arc.
+      const approach=predictTravel(node.lead,at,0,1);
       const samples=node.kind==='flat' ? [0,.17,.34,.51,.68,.85] :
         node.kind==='double' ? [.16,.28,.42,.56,.70,.84] : [.10,.22,.34,.46,.58];
       for(const t of samples) {
         const path=asset.items[orangeSequence%asset.items.length]; if(!images[path]) continue;
-        const x=node.kind==='flat' ? node.center+predictTravel(t,at,boost) : node.center+predictTravel(t,at,boost)-approach;
+        const x=node.kind==='flat' ? node.center+predictTravel(t,at,0,1) : node.center+predictTravel(t,at,0,1)-approach;
         const y=node.kind==='flat' ? GROUND-48 : GROUND+jumpOffset(t,node.kind==='double')-player.h/2;
         const orange={type:'orange',path,x:x-18,y:Math.max(90,Math.min(GROUND-38,y-18)),w:36,h:36,hit:false,phase:orangeSequence*.7,pattern:node.kind};
         if(created.some(o=>overlap({...orange,y:orange.y-5,h:orange.h+10},o))) continue;
@@ -316,24 +337,26 @@
       }
     }
     const lastNode=nodes.at(-1);
-    let after=lastNode.kind==='flat' ? 1000+level.extra : landingGap(lastNode,{lead:.56},level);
     // A rare replacement, never an additional spawn. Cooldowns are the original
     // 36s / 48s minimums, and only reset after a replacement actually occurs.
+    const finalCore = created.length ? hitRect(created.at(-1)) : null;
+    // A brush uses an existing late slot after this obstacle's collision core.
+    // Its immediate acceleration must not pull the player into the same jump.
+    const brushSlots = lastArc.filter(slot => !finalCore || slot.x > finalCore.x+finalCore.w+player.w);
     const ready = ['brush','giant'].filter(type => images[asset[type][0]] &&
-      time >= (type === 'brush' ? nextBrushAt : nextGiantAt));
+      time >= (type === 'brush' ? nextBrushAt : nextGiantAt) && (type !== 'brush' || brushSlots.length));
     // Keep the old arcs and every remaining orange exactly where they were.
     // Use the final arc so a brush cannot accelerate earlier in-group jumps.
     if (ready.length && lastArc.length && Math.random() < .25) {
       const type = ready[Math.floor(Math.random()*ready.length)];
-      const slot = lastArc[Math.floor(Math.random()*lastArc.length)];
+      const slots = type === 'brush' ? brushSlots : lastArc;
+      const slot = slots[Math.floor(Math.random()*slots.length)];
       Object.assign(slot, {type, path:asset[type][0]});
       if (type === 'brush') nextBrushAt = time + 36;
       else nextGiantAt = time + 48;
-      // Retain the original special-group landing/rest spacing; no new rule.
-      const flight=lastNode.kind==='double'?DOUBLE_FLIGHT:SINGLE_FLIGHT;
-      const rest=lastNode.kind==='flat'?330:MAX_SPEED*(flight+level.recovery)-SPEED*lastNode.lead+48;
-      after=Math.max(after,rest+100+MAX_SPEED*.85);
     }
+    // Include a newly replaced brush in the ordinary physics safety spacing.
+    const after=lastNode.kind==='flat' ? 1000+level.extra : landingGap(lastNode,{lead:.56},level);
     patternIndex++;
     spawnIn=(lastNode.center-anchor+after+Math.max(0,anchor-baseAnchor))/SPEED;
   }
@@ -367,7 +390,7 @@
     return false;
   }
   function movementFactor() {
-    return Math.min(viewportSpeedCap/SPEED, MAX_SPEED/SPEED, difficultySpeed()*brushFactor());
+    return Math.min(viewportSpeedCap/SPEED, MAX_SPEED/SPEED, difficultySpeed()*scoreSpeed()*brushFactor());
   }
   function collectEffect(amount) {
     const recent = effects.find(e => e.type === 'collect' && e.life > .08);
@@ -450,7 +473,7 @@
     for (const o of objects) {
       if (o.type==='obstacle' || o.hit || !collides(pickupBox,o)) continue;
       if (o.type==='orange') {
-        o.hit=true; score+=100; collectEffect(100);
+        o.hit=true; score+=100; syncScoreSpeed(); collectEffect(100);
       } else if(o.type==='brush') {
         o.hit=true; boostRemaining=BOOST_SECONDS;
         $('status').textContent='붓 획득. 5초 가속!';
@@ -486,7 +509,7 @@
   function update(dt) {
     if (mode !== 'running') return;
     // Real-time boost clock and movement clock are separate. Small steps avoid tunnelling
-    // up to 765px/s and split exactly at item expiration boundaries.
+    // up to MAX_SPEED and split exactly at item expiration boundaries.
     // Vertical physics always uses realDt, independent of either speed multiplier.
     let remaining = dt;
     while (remaining > 1e-9 && mode === 'running') {
