@@ -35,7 +35,7 @@ window.difficultyTest={
     while(cursor<initial.length&&steps++<20000){
      const state=g.state();const o=state.objects.find(o=>o.type==='obstacle'&&o.order===cursor)||(airborne?initial[cursor]:null);
      if(!o&&g.destroyed(initial[cursor].group,initial[cursor].order)){cursor++;continue;}if(!o)throw new Error('target disappeared '+JSON.stringify(r));
-     if(airborne&&state.player.grounded){airborne=false;lastLanding=state.time;cursor++;continue;}
+     if(airborne&&state.player.grounded){airborne=false;lastLanding=state.time-Math.max(0,.14-state.player.land);cursor++;continue;}
      let dt=1/fps;
      if(!airborne){
       const lead=o.lead-jitter,delta=o.x+o.w/2-(state.player.x+state.player.w/2)-g.predictTravel(lead);
@@ -79,7 +79,7 @@ window.difficultyTest={
     while(g.state().time<185&&steps++<80000){
      const state=g.state();const captureAt=[.5,20.5,35.5,52][window.fastCaptures.length];if(captureAt!==undefined&&state.time>=captureAt){g.render();window.fastCaptures.push({at:captureAt,data:document.querySelector('#game').toDataURL()});}if(state.health!==3)return {health:state.health,time:state.time,target,player:state.player,objects:state.objects,boost:state.boostRemaining,giant:state.giantRemaining};
      if(state.giantRemaining>0)lastLanding=null;
-     if(airborne&&state.player.grounded){passed.add(target.group+':'+target.order);airborne=false;lastLanding=state.giantRemaining>0?null:state.time;}
+     if(airborne&&state.player.grounded){passed.add(target.group+':'+target.order);airborne=false;lastLanding=state.giantRemaining>0?null:state.time-Math.max(0,.14-state.player.land);}
      if(!airborne)target=state.objects.filter(o=>o.type==='obstacle'&&!passed.has(o.group+':'+o.order)).sort((a,b)=>(a.x+a.w/2)-(b.x+b.w/2))[0];
      let dt=1/30;
      if(!airborne&&target){

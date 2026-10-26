@@ -7,7 +7,7 @@ window.balanceTest={start:()=>{start();let seed=12345;Math.random=()=>{seed=(Mat
  exitSetup:(at,boost,air)=>{start();time=at;currentStage=difficultyAt().index;boostRemaining=boost?5:0;giantRemaining=.01;visualScale=1.5;objects=[];spawnIn=1e6;nextBrushAt=nextGiantAt=1e6;
  if(air){jump();update(.12);jump();update(.08);giantRemaining=.01;}
  const d=OBSTACLES[2],h=d.height,w=h*images[d.path].naturalWidth/images[d.path].naturalHeight;
- objects.push({type:'obstacle',path:d.path,core:d.core,x:player.x+player.w/2+10-w/2,y:GROUND-h,w,h,hit:false});},
+ objects.push({type:'obstacle',path:d.path,core:d.core,x:player.x+player.w+140-w/2,y:GROUND-h,w,h,hit:false});},
  postExitSpawn:()=>{objects=[];spawn();spawnIn=1e6;},
  gate:at=>{start();time=at;currentStage=difficultyAt().index;patternIndex=0;objects=[];window.gateRecipe=['double'];spawn();window.gateRecipe=null;return objects.filter(o=>o.type==='obstacle').map(o=>o.pattern);}
 };hud();requestAnimationFrame(frame);`);
@@ -59,7 +59,7 @@ window.balanceTest={start:()=>{start();let seed=12345;Math.random=()=>{seed=(Mat
    const distance=earliest.x+earliest.w/2-(next.player.x+next.player.w/2),required=balanceTest.predictTravel(Math.max(0,next.giantExitReadyAt-next.time)+earliest.lead);
    r.push({at,boost,air,health:exit.health,giant:exit.giantRemaining,remaining:exit.objects.filter(o=>o.type==='obstacle').length,readyAfter:exit.giantExitReadyAt-exit.time,distance,required});
   }return r;});
-  for(const e of exits){assert.equal(e.health,3,JSON.stringify(e));assert.equal(e.giant,0);assert.equal(e.remaining,0);assert(e.readyAfter>=.18-1e-8);assert(e.distance>=e.required,JSON.stringify(e));}
+  for(const e of exits){assert.equal(e.health,3,JSON.stringify(e));assert.equal(e.giant,0);assert.equal(e.remaining,1);assert(e.readyAfter>=.18-1e-8);assert(e.distance>=e.required,JSON.stringify(e));}
   // Special replacements use a fixed seed; historical density fixtures predate this placement.
   const output=path.resolve(__dirname,'../work/validation');fs.mkdirSync(output,{recursive:true});for(const capture of await page.evaluate(()=>window.balanceCaptures))fs.writeFileSync(path.join(output,`balance-${capture.at}s.png`),Buffer.from(capture.data.split(',')[1],'base64'));
   console.log(JSON.stringify({result:'PASS',outcomes,exitCases:exits,notes:'Scripted input policies are not measurements of human novice/expert lifetimes.'}));

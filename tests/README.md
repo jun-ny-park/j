@@ -20,6 +20,8 @@ node tests/ui-details.cjs
 node tests/pause-image.cjs
 node tests/collection.cjs
 node tests/giant-smash.cjs
+node tests/giant-contact.cjs
+node tests/obstacle-spacing.cjs
 node tests/difficulty.cjs
 node tests/restoration.cjs
 node tests/speed-items.cjs
@@ -48,3 +50,5 @@ node tests/background-style.cjs
 `restoration.cjs`는 기존 배치와의 좌표 일치·귤 자리 대체·멈춤 토글·두루마리 85% 축소를 검증합니다. `performance.cjs`는 `0195379`의 코드와 캐시 구현을 같은 장면으로 비교하므로 해당 커밋을 포함한 Git 기록이 필요합니다. 벤치마크는 픽셀 읽기를 강제한 비용이며 실제 FPS 측정이 아닙니다.
 
 `speed-items.cjs`는 효과 전후 귤의 고정 월드 간격, 긴 특수 아이템 휴식 제거, 점수 배율과 보간, 고속 회피 및 모바일 가로 제목 두 줄을 검사합니다.
+
+`giant-contact.cjs`는 분리된 장애물30쌍의 실제 접촉·5종 투명 영역·실제 동시 접촉·만료 시 선제 파괴 없음·일반 피해 복귀를 검사합니다. `obstacle-spacing.cjs`는 `8fda285`와 360개 생성 상황을 비교해 간격/공통 주기 축소율과 이미지·배열·속도 보존을 측정합니다. `balance.cjs`의 만료 검사는 닿지 않은 물체가 남아 있어야 통과합니다. 착지 시간은 저프레임 관측 프레임이 아니라 실제 착지 후 경과 시간을 사용합니다.

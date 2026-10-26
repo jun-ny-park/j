@@ -44,6 +44,8 @@
   const SCORE_RAMP_SECONDS = 1.5;
   // Final factors relative to the original 306px/s, never compounded with older stages.
   const MAX_SPEED = SPEED * 2 * 1.30 * 1.5; // Maximum time × score × brush; applied once.
+  const OBSTACLE_GAP_FACTOR = .78;
+  const MIN_LANDING_RECOVERY = .085;
   const SPACING_MARGIN = 48; // body alignment plus approximately 30ms input slack
   const SINGLE_FLIGHT = 2 * FIRST_JUMP / GRAVITY;
   const SECOND_AT = .24;
@@ -87,7 +89,7 @@
     const t = c.getContext('2d');
     t.drawImage(img, 0, 0);
     const pixels = t.getImageData(0, 0, c.width, c.height).data;
-    if (obstaclePaths.includes(path)) masks[path] = { data: pixels, width: c.width, height: c.height };
+    if (obstaclePaths.includes(path) || asset.characters.includes(path)) masks[path] = { data: pixels, width: c.width, height: c.height };
     let left = c.width, top = c.height, right = -1, bottom = -1;
     for (let y = 0; y < c.height; y++) {
       for (let x = 0; x < c.width; x++) {
@@ -284,7 +286,15 @@
     const queuedPoints=objects.reduce((sum,o)=>sum+(o.type==='orange'&&!o.hit?100:0),0);
     const possibleScoreFactor=patternOnly?1:scoreFactorFor(score+queuedPoints+24*100);
     const maxSpeed=Math.min(viewportSpeedCap,SPEED*difficultySpeed(time+horizon)*Math.max(patternOnly?1:scoreSpeed(time+horizon),possibleScoreFactor)*(mayBoost?BOOST_FACTOR:1));
-    return maxSpeed*(flight+level.recovery+next.lead)-minSpeed*previous.lead+SPACING_MARGIN+level.extra;
+    const original=maxSpeed*(flight+level.recovery+next.lead)-minSpeed*previous.lead+SPACING_MARGIN+level.extra;
+    if(patternOnly)return original; // Keep the existing internal collectible shape.
+    // Never shorten below a complete jump, a grounded recovery, and the next
+    // approach. A known brush that lasts through the whole approach also covers
+    // the previous lead; otherwise use the conservative unboosted lower bound.
+    const guaranteedBrush=brushFactor(Math.max(0,boostRemaining-approach-previous.lead));
+    const leadSpeed=Math.min(viewportSpeedCap,minSpeed*guaranteedBrush);
+    const physicalMinimum=maxSpeed*(flight+MIN_LANDING_RECOVERY+next.lead)-leadSpeed*previous.lead+18;
+    return Math.max(original*OBSTACLE_GAP_FACTOR,physicalMinimum);
   }
   function spawn() {
     const level = difficultyAt();
@@ -424,20 +434,34 @@
     }
   }
   function destructionBox() {
-    const size = Math.max(1, visualScale), w=player.w*size, h=player.h*size;
-    return {x:player.x+(player.w-w)/2+8,y:player.y+player.h-h+15,w:w-16,h:h-20};
+    const frame = characterGeometry();
+    if (!frame) return null;
+    const a = alphaBounds[frame.path];
+    return {x:frame.x+a.x*frame.w,y:frame.y+a.y*frame.h,w:a.w*frame.w,h:a.h*frame.h};
+  }
+  function giantTouches(o, box) {
+    if (!box || !collides(box,o)) return false;
+    const frame=characterGeometry(), body=masks[frame.path], obstacle=masks[o.path];
+    if (!body || !obstacle) return false;
+    const r=spriteRect(o), core=hitRect(o);
+    const left=Math.max(box.x,core.x), right=Math.min(box.x+box.w,core.x+core.w);
+    const top=Math.max(box.y,core.y), bottom=Math.min(box.y+box.h,core.y+core.h);
+    // Sample the visible intersection, not an expanded forward reach. At most
+    // half a logical pixel separates samples; transparent hat/robe gaps do not hit.
+    const opaque=(mask,rect,x,y)=>{
+      const px=Math.floor((x-rect.x)/rect.w*mask.width),py=Math.floor((y-rect.y)/rect.h*mask.height);
+      return px>=0&&px<mask.width&&py>=0&&py<mask.height&&mask.data[(py*mask.width+px)*4+3]>=96;
+    };
+    for(let y=top+.125;y<bottom;y+=.5)for(let x=left+.125;x<right;x+=.5){
+      if(opaque(body,frame,x,y)&&opaque(obstacle,r,x,y))return true;
+    }
+    return false;
   }
   function secureGiantExit() {
     const feet=player.y+player.h-GROUND;
     const landing=player.grounded?0:Math.max(0,(-player.vy+Math.sqrt(player.vy**2-2*GRAVITY*feet))/GRAVITY);
     const settle=landing+Math.max(.18,difficultyAt().recovery);
     giantExitReadyAt=time+settle;
-    const front=player.x+player.w/2+predictTravel(settle+.56)+player.w/2+16;
-    for(const o of objects) {
-      if(o.type!=='obstacle'||o.destroyed)continue;
-      const b=hitRect(o);
-      if(b.x<=front && b.x+b.w>=player.x-16)smashObstacle(o);
-    }
   }
   function advance(realDt, factor) {
     const runDt = realDt * factor;
@@ -482,11 +506,11 @@
         $('status').textContent='과거 책 획득. 5초 거대화!';
       }
     }
-    // Finish the power-up with a short clear approach corridor, not extra immunity.
+    // Keep only the remaining landing time; expiry never destroys nearby objects.
     if(giantWasActive && giantRemaining===0) secureGiantExit();
     const giantBox=giantRemaining>0?destructionBox():null;
     for (const o of objects) {
-      if (o.type!=='obstacle' || (o.hit && giantRemaining<=0) || o.destroyed || !collides(giantBox||damageBox,o)) continue;
+      if (o.type!=='obstacle' || (o.hit && giantRemaining<=0) || o.destroyed || !(giantRemaining>0 ? giantTouches(o,giantBox) : collides(damageBox,o))) continue;
       if (giantRemaining>0) {
         smashObstacle(o);
       } else if(invincible<=0) {
