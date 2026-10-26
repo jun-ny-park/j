@@ -5,10 +5,10 @@ const source=fs.readFileSync(path.resolve(__dirname,'../game.js'),'utf8').replac
 window.smashTest={
  state:()=>({mode,time,runTime,score,health,boostRemaining,giantRemaining,visualScale,giantIntroRemaining,lastGiantStep,invincible,
  player:{...player},objects:objects.map(o=>({...o})),flights:flyingObstacles.map(f=>({...f})),effects:effects.map(e=>({...e})),worldWidth}),
- update,jump,pause,start,endGame,render,endingOpacity,
+ update,jump,pause,start,endGame,render,endingOpacity,count:()=>OBSTACLES.length,
  isolated:(giant=5,boost=0,at=0)=>{start();time=at;currentStage=difficultyAt().index;objects=[];spawnIn=1e6;giantRemaining=giant;boostRemaining=boost;visualScale=giant?1.5:1;},
  effects:(g,b=0)=>{giantRemaining=g;boostRemaining=b;hud();},
- obstacle:(n=0,x=player.x+player.w/2+20,hit=false)=>{const d=OBSTACLES[n],h=d.height,w=h*images[d.path].naturalWidth/images[d.path].naturalHeight;objects.push({type:'obstacle',path:d.path,core:d.core,x:x-w/2,y:GROUND-h,w,h,hit,pattern:d.kind});},
+ obstacle:(n=0,x=player.x+player.w/2+20,hit=false)=>{const d=OBSTACLES[n],h=d.height,a=d.fitVisible?alphaBounds[d.path]:{w:1,h:1},w=h*images[d.path].naturalWidth*a.w/(images[d.path].naturalHeight*a.h);objects.push({type:'obstacle',path:d.path,core:d.core,fitVisible:!!d.fitVisible,x:x-w/2,y:GROUND-h,w,h,hit,pattern:d.kind});},
  pickup:type=>objects.push({type,path:asset[type][0],x:player.x+18,y:player.y+20,w:38,h:47,hit:false}),
  orange:()=>objects.push({type:'orange',path:asset.items[0],x:player.x+18,y:player.y+20,w:36,h:36,phase:0,hit:false}),
  airborne:()=>{player.grounded=false;player.y=GROUND-player.h-100;player.vy=-200;},
@@ -24,11 +24,11 @@ window.smashTest={
   await page.route('**/game.js',r=>r.fulfill({contentType:'text/javascript',body:source}));await page.clock.install();await page.goto(process.env.GAME_URL||'http://127.0.0.1:8001');await page.waitForFunction(()=>document.querySelector('#loading').textContent.includes('SPACE'));
   // Drive frames explicitly so host CPU load cannot advance flight ages between assertions.
   await page.clock.pauseAt(await page.evaluate(()=>Date.now()+100));
-  const smashCases=await page.evaluate(()=>{const g=smashTest,r=[];for(const fps of [15,60,120])for(const boost of [0,5])for(let n=0;n<5;n++){
+  const smashCases=await page.evaluate(()=>{const g=smashTest,r=[];for(const fps of [15,60,120])for(const boost of [0,5])for(let n=0;n<g.count();n++){
    const tick=seconds=>{let left=seconds;while(left>1e-9){const dt=Math.min(left,1/fps);g.update(dt);left-=dt;}};g.isolated(5,boost,115);g.obstacle(n);g.update(1/fps);const hit=g.state();tick(.3);const later=g.state();tick(.31);const end=g.state();r.push({fps,boost,n,hit,later,end});
   }return r;});
   for(const r of smashCases){assert.equal(r.hit.health,3);assert.equal(r.hit.objects.filter(o=>o.type==='obstacle').length,0);assert.equal(r.hit.flights.length,1);assert.equal(r.hit.flights[0].duration,.6);assert.equal(r.later.flights.length,1);assert.equal(r.end.flights.length,0);assert.equal(r.end.score,0);assert.equal(r.end.player.grounded,true);assert.equal(r.end.player.vy,0);}
-  const runThrough=await page.evaluate(()=>{const g=smashTest;g.isolated(5,5,115);for(let i=0;i<5;i++)g.obstacle(i,g.state().player.x+150+i*120);for(let i=0;i<250;i++)g.update(.01);return g.state();});
+  const runThrough=await page.evaluate(()=>{const g=smashTest;g.isolated(5,5,115);for(let i=0;i<g.count();i++)g.obstacle(i,g.state().player.x+150+i*120);for(let i=0;i<250;i++)g.update(.01);return g.state();});
   assert.equal(runThrough.health,3);assert.equal(runThrough.objects.filter(o=>o.type==='obstacle').length,0);assert.equal(runThrough.player.jumps,0);
   const simultaneous=await page.evaluate(()=>{const g=smashTest;g.isolated(0);g.obstacle(0);g.pickup('giant');g.orange();g.update(1/120);const first=g.state();g.update(.05);return {first,second:g.state()};});assert.equal(simultaneous.first.health,3);assert.equal(simultaneous.first.score,100);assert.equal(simultaneous.second.score,100);assert.equal(simultaneous.second.flights.length,1);
   const alreadyHit=await page.evaluate(()=>{smashTest.isolated(5);smashTest.obstacle(2,undefined,true);smashTest.update(.01);return smashTest.state();});assert.equal(alreadyHit.flights.length,1);
@@ -51,6 +51,6 @@ window.smashTest={
   assert(!requests.some(r=>/캐릭터이미지[67]\.png$/.test(r)),'sliding poses not requested');
   await page.evaluate(()=>{smashTest.isolated(0);smashTest.pickup('giant');smashTest.update(.12);smashTest.obstacle(4);smashTest.update(.1);smashTest.freeze();});await page.screenshot({path:path.join(output,'giant-smash-pc.png')});
   await page.setViewportSize({width:390,height:844});await page.waitForFunction(()=>{const r=document.querySelector('canvas').getBoundingClientRect();return Math.abs(r.width/smashTest.state().worldWidth-r.height/500)<.001;});await page.evaluate(()=>{smashTest.isolated(5,5,115);smashTest.obstacle(2);smashTest.update(.12);smashTest.freeze();});await page.screenshot({path:path.join(output,'giant-smash-mobile.png')});
-  assert.deepEqual(errors,[]);assert.deepEqual(bad,[]);console.log(JSON.stringify({result:'PASS',smashCases:smashCases.length,checks:['all five actual obstacles smashed without jumping','zero HP loss or recoil','same-step pickup immunity','no duplicate collision or score','right/up rotation shrink fade over 0.6 seconds','independent timers and pause-frozen flight','expiry restores ordinary damage','game over/restart clears all effects','three gentle ending flashes','sliding poses never loaded/drawn','normal/jump/double/giant/hit/game-over frames remain visible','PC/mobile screenshots']}));
+  assert.deepEqual(errors,[]);assert.deepEqual(bad,[]);console.log(JSON.stringify({result:'PASS',smashCases:smashCases.length,checks:['all nine actual obstacles smashed without jumping','zero HP loss or recoil','same-step pickup immunity','no duplicate collision or score','right/up rotation shrink fade over 0.6 seconds','independent timers and pause-frozen flight','expiry restores ordinary damage','game over/restart clears all effects','three gentle ending flashes','sliding poses never loaded/drawn','normal/jump/double/giant/hit/game-over frames remain visible','PC/mobile screenshots']}));
  }finally{await browser.close();}
 })();

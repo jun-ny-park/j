@@ -55,14 +55,14 @@ window.difficultyTest={
     return r;
    }
    const recipes=g.recipes();
-   for(let stage=0;stage<5;stage++)for(let index=0;index<recipes[stage]*3;index++)for(const boost of [false,true])for(const giant of [false,true])for(const fps of [15,60,120])results.push(route(stage,index,boost,giant,fps));
-   for(let stage=0;stage<5;stage++)for(let index=0;index<recipes[stage]*3;index++)for(const boost of [false,true])for(const jitter of [-.03,.03])results.push(route(stage,index,boost,false,60,jitter));
+   for(let stage=0;stage<5;stage++)for(let index=0;index<recipes[stage]*5;index++)for(const boost of [false,true])for(const giant of [false,true])for(const fps of [15,60,120])results.push(route(stage,index,boost,giant,fps));
+   for(let stage=0;stage<5;stage++)for(let index=0;index<recipes[stage]*5;index++)for(const boost of [false,true])for(const jitter of [-.03,.03])results.push(route(stage,index,boost,false,60,jitter));
    for(const [stage,at]of [[0,9.7],[1,19.7],[2,34.7],[3,49.7]])for(const jitter of [-.03,0,.03])for(const boost of [false,true])results.push(route(stage,0,boost,false,60,jitter,at));
    return results;
   });
   for(const r of routes){assert.equal(r.health,3,JSON.stringify(r));assert(r.finished,JSON.stringify(r));if(r.minRecovery!==null)assert(r.minRecovery>=.085/(r.boost?1.5:1)-1e-3,JSON.stringify(r));}
-  const paths=new Set(routes.flatMap(r=>r.paths));assert.deepEqual([...paths].sort(),[1,2,6,7,9].map(n=>`assets/obstacles/기타이미지${n}.png`).sort());
-  assert(routes.filter(r=>r.stage===0).every(r=>r.paths.every(p=>/기타이미지[12]\.png$/.test(p))));
+  const paths=new Set(routes.flatMap(r=>r.paths));assert.deepEqual([...paths].sort(),[1,5,6,7,9].map(n=>`assets/obstacles/기타이미지${n}.png`).concat([1,2,3,4].map(n=>`assets/obstacles/야호${n}.png`)).sort());
+  assert(routes.filter(r=>r.stage===0).every(r=>r.paths.every(p=>/(?:기타이미지[15]|야호[23])\.png$/.test(p))));
   const rare=await page.evaluate(()=>difficultyTest.rareSeries());for(const type of ['brush','giant']){const events=rare.filter(e=>e.type===type);for(let i=1;i<events.length;i++)assert(events[i].t-events[i-1].t>=(type==='brush'?36:48));}
   const pause=await page.evaluate(()=>{const g=difficultyTest;g.isolated(19.99,5,5);g.pause();const before=g.state();g.update(50);const after=g.state();g.pause();g.update(.02);const resumed=g.state();g.update(1.01);const faded=g.state();g.update(5.1);for(let i=0;i<3;i++){g.collision();g.update(.01);}const over=g.state();g.start();return {before,after,resumed,faded,over,reset:g.state()};});
   assert.deepEqual(pause.before,pause.after);assert.equal(pause.resumed.stage,2);assert.equal(await page.locator('#difficulty-note').count(),0);assert.equal(pause.reset.stage,0);assert.equal(pause.reset.time,0);assert.equal(pause.reset.boostRemaining,0);assert.equal(pause.reset.giantRemaining,0);assert.equal(pause.over.mode,'over');

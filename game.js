@@ -24,10 +24,14 @@
   };
   const OBSTACLES = [
     { path: 'assets/obstacles/기타이미지1.png', kind: 'single', height: 55, core: {x:.08,y:.08,w:.84,h:.86} },
-    { path: 'assets/obstacles/기타이미지2.png', kind: 'single', height: 68, core: {x:.13,y:.10,w:.74,h:.84} },
+    { path: 'assets/obstacles/기타이미지5.png', kind: 'single', height: 68, fitVisible:true, core: {x:.04,y:.08,w:.92,h:.88} },
+    { path: 'assets/obstacles/야호2.png', kind: 'single', height: 68, fitVisible:true, core: {x:.04,y:.04,w:.92,h:.91} },
+    { path: 'assets/obstacles/야호3.png', kind: 'single', height: 72, fitVisible:true, core: {x:.04,y:.04,w:.92,h:.91} },
     { path: 'assets/obstacles/기타이미지6.png', kind: 'double', height: 165, core: {x:.35,y:.14,w:.30,h:.80} },
     { path: 'assets/obstacles/기타이미지7.png', kind: 'double', height: 170, core: {x:.40,y:.15,w:.23,h:.80} },
-    { path: 'assets/obstacles/기타이미지9.png', kind: 'double', height: 160, core: {x:.24,y:.08,w:.54,h:.80} }
+    { path: 'assets/obstacles/기타이미지9.png', kind: 'double', height: 160, core: {x:.24,y:.08,w:.54,h:.80} },
+    { path: 'assets/obstacles/야호1.png', kind: 'double', height: 160, fitVisible:true, core: {x:.18,y:.17,w:.64,h:.78} },
+    { path: 'assets/obstacles/야호4.png', kind: 'double', height: 140, fitVisible:true, core: {x:.03,y:.04,w:.94,h:.91} }
   ];
   const images = {}, silhouettes = {}, alphaBounds = {}, masks = {}, failed = [];
   const H = 500, GROUND = 461;
@@ -106,6 +110,7 @@
     previousPattern=plan.id; previousQuiet=!!selected.pattern.quiet;
     layoutRepeat=plan.signature===previousLayout?layoutRepeat+1:1;
     previousLayout=plan.signature;
+    if(plan.id==='bonus')plan.lineY=GROUND-(patternRandom()<.5?150:50);
     return plan;
   }
   const hudCache = Object.create(null);
@@ -344,6 +349,7 @@
   function spawn() {
     const level = difficultyAt();
     const selection = selectPattern(level);
+    const straightY=selection.obstacles.every(visible=>!visible)?(selection.lineY ?? GROUND-50):null;
     const recipe = selection.recipe.map(kind=>kind==='double'&&time<10?'single':kind);
     const baseAnchor=worldWidth+60;
     let anchor=patternIndex===0 ? Math.min(baseAnchor,player.x+player.w/2+SPEED*2) : baseAnchor;
@@ -366,14 +372,18 @@
       const variants=OBSTACLES.filter(o=>o.kind===node.kind);
       const descriptor=variants[obstacleChoices[node.kind]++ % variants.length];
       if(!descriptor || !images[descriptor.path]) continue;
-      const img=images[descriptor.path], h=descriptor.height, w=h*img.naturalWidth/img.naturalHeight;
+      const img=images[descriptor.path], h=descriptor.height;
+      const bounds=descriptor.fitVisible?alphaBounds[descriptor.path]:{w:1,h:1};
+      const w=h*img.naturalWidth*bounds.w/(img.naturalHeight*bounds.h);
       const obstacle={type:'obstacle',path:descriptor.path,core:descriptor.core,
         x:node.center-w/2,y:GROUND-h,w,h,hit:false,pattern:node.kind,
         lead:node.lead,stage:level.index,group:patternIndex,order:created.length};
+      if(descriptor.fitVisible)obstacle.fitVisible=true;
       // Keep the virtual obstacle for the existing coin exclusion/slot rules.
       // Bonus/rest only omit its display/collision; coin coordinates do not change.
       created.push(obstacle); if(node.obstacle) objects.push(obstacle);
     }
+    const firstCoin=objects.length;
     for(const node of nodes) {
       const reaches=arrivalTime(node.patternCenter-(player.x+player.w/2),true);
       const jumpAt=Math.max(0,reaches-node.lead);
@@ -390,6 +400,11 @@
         if(created.some(o=>overlap({...orange,y:orange.y-5,h:orange.h+10},o))) continue;
         objects.push(orange); if(node === nodes.at(-1)) lastArc.push(orange); orangeSequence++;
       }
+    }
+    // Retain every old X slot and exclusion decision; flatten Y only after
+    // the existing arc builder has finished. No phantom obstacle gaps in a line.
+    if(straightY!==null)for(let i=firstCoin;i<objects.length;i++){
+      objects[i].y=straightY-18; objects[i].straight=true;
     }
     const lastNode=nodes.at(-1);
     // A rare replacement, never an additional spawn. Cooldowns are the original
@@ -419,10 +434,10 @@
   function spriteRect(o) {
     const img = images[o.path];
     if (!img) return { x: o.x, y: o.y, w: o.w, h: o.h };
-    const bounds = o.type === 'obstacle' ? { x:0,y:0,w:1,h:1 } : (alphaBounds[o.path] || {x:0,y:0,w:1,h:1});
+    const bounds = o.type === 'obstacle' && !o.fitVisible ? { x:0,y:0,w:1,h:1 } : (alphaBounds[o.path] || {x:0,y:0,w:1,h:1});
     const scale = Math.min(o.w / (img.naturalWidth * bounds.w), o.h / (img.naturalHeight * bounds.h));
     const w = img.naturalWidth * scale, h = img.naturalHeight * scale;
-    const bob = o.type === 'orange' ? Math.sin(time * 3 + o.phase) * 3 : 0;
+    const bob = o.type === 'orange' && !o.straight ? Math.sin(time * 3 + o.phase) * 3 : 0;
     return { x: o.x + (o.w - w * bounds.w) / 2 - bounds.x * w,
       y: o.y + o.h - h * bounds.h - bounds.y * h + bob, w, h };
   }
@@ -656,7 +671,7 @@
     if (o.type === 'orange' || o.type === 'brush' || o.type === 'giant') {
       const cached=cachedCollectible(o);
       if(cached){
-        const bob=o.type==='orange'?Math.sin(time*3+o.phase)*3:0;
+        const bob=o.type==='orange'&&!o.straight?Math.sin(time*3+o.phase)*3:0;
         ctx.drawImage(cached.canvas,o.x-cached.pad,o.y+bob-cached.pad,cached.w,cached.h);
       }else{
       const silhouette = silhouettes[o.path];

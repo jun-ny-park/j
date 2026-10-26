@@ -3,7 +3,7 @@ const {chromium}=require('playwright');
 const output=path.resolve(__dirname,'../work/validation');fs.mkdirSync(output,{recursive:true});
 const source=fs.readFileSync(path.resolve(__dirname,'../game.js'),'utf8').replace(' hud();requestAnimationFrame(frame);',`
 window.backgroundStyleTest={
- scenario:index=>{start();objects=[];spawnIn=1e6;const n=Math.max(0,[1,5,3,7,11].indexOf(index)),d=OBSTACLES[n],img=images[d.path],h=d.height,w=h*img.naturalWidth/img.naturalHeight;
+ scenario:index=>{start();objects=[];spawnIn=1e6;const n=index,d=OBSTACLES[n],img=images[d.path],h=d.height,w=h*img.naturalWidth/img.naturalHeight;
  objects.push({type:'obstacle',path:d.path,core:d.core,x:player.x+150,y:GROUND-h,w,h});
  asset.items.forEach((path,i)=>objects.push({type:'orange',path,x:player.x+40+i*45,y:GROUND+jumpOffset(.10+i*.12,true)-player.h/2-18,w:36,h:36,phase:i}));
  for(const type of ['brush','giant'])objects.push({type,path:asset[type][0],x:Math.min(player.x+(type==='brush'?320:380),worldWidth-(type==='brush'?90:44)),y:GROUND-90,w:36,h:43,phase:0});mode='paused';},
@@ -29,11 +29,11 @@ window.backgroundStyleTest={
    assert.equal(await page.evaluate(()=>backgroundStyleTest.filter()),'none');assert.equal(await page.evaluate(()=>backgroundStyleTest.edges()),255,'no transparent blur margins');
    assert.equal(await page.locator('canvas').evaluate(e=>getComputedStyle(e).filter),'none');assert.equal(await page.locator('.hud').evaluate(e=>getComputedStyle(e).filter),'none');
    await page.screenshot({path:path.join(output,`depth-after-${config.width}x${config.height}-${config.dpr}-${!!config.touch}.png`)});
-   const seen=new Set();for(const index of [1,5,3,7,11]){
+   const seen=new Set();for(const index of [0,1,2,3,4,5,6,7,8]){
     const frame=await page.evaluate(i=>{backgroundStyleTest.scenario(i);window.renderCalls=[];backgroundStyleTest.render();return window.renderCalls;},index);
     for(const c of frame.filter(c=>/\/characters\/|\/items\/|\/obstacles\/|\/extras\//.test(c.source))){assert.equal(c.filter,'none');seen.add(decodeURIComponent(c.source).split('/').at(-1));}
    }
-   for(const n of [1,2,6,7,9])assert(seen.has(`기타이미지${n}.png`),'all obstacles sharp');for(let n=1;n<=6;n++)assert(seen.has(`귤${n}.png`),'all oranges sharp');assert(seen.has('기타이미지3.png'));assert(seen.has('기타이미지4.png'));
+   for(const name of ['기타이미지1','기타이미지5','기타이미지6','기타이미지7','기타이미지9','야호1','야호2','야호3','야호4'])assert(seen.has(name+'.png'),'all obstacles sharp');for(let n=1;n<=6;n++)assert(seen.has(`귤${n}.png`),'all oranges sharp');assert(seen.has('기타이미지3.png'));assert(seen.has('기타이미지4.png'));
    assert.deepEqual(errors,[]);summary.push({width:config.width,height:config.height,touch:!!config.touch,dpr:config.dpr,backgroundFilter:filtered[0].filter,foreground:'none',opaqueEdges:true});await context.close();
   }
   console.log(JSON.stringify({result:'PASS',summary,checks:['background-only filter','all six oranges, five obstacles, character and both special items unfiltered','no CSS canvas/UI filter','no transparent blur border','before/after screenshots']}));
