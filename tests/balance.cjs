@@ -1,8 +1,8 @@
 const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
 const {chromium}=require('playwright');
 const file=process.env.BALANCE_SOURCE||path.resolve(__dirname,'../game.js');
-const source=fs.readFileSync(file,'utf8').replace('const recipe = chooseRecipe(level)', 'const recipe = (window.gateRecipe || chooseRecipe(level))').replace(' hud();requestAnimationFrame(frame);',`
-window.balanceTest={start:()=>{start();if(typeof resetRandom==='function')resetRandom(12345);nextBrushAt=18;nextGiantAt=30;},update,jump,pause,spawn,predictTravel,render,
+const source=fs.readFileSync(file,'utf8').replace('level.recipes[patternIndex % level.recipes.length].map', '(window.gateRecipe || level.recipes[patternIndex % level.recipes.length]).map').replace(' hud();requestAnimationFrame(frame);',`
+window.balanceTest={start:()=>{start();let seed=12345;Math.random=()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296;};nextBrushAt=18;nextGiantAt=30;},update,jump,pause,spawn,predictTravel,render,
  state:()=>({mode,time,stage:currentStage,score,health,speed:SPEED*movementFactor(),boostRemaining,giantRemaining,giantExitReadyAt:typeof giantExitReadyAt==='undefined'?0:giantExitReadyAt,player:{...player},objects:objects.map(o=>({...o})),worldWidth}),
  exitSetup:(at,boost,air)=>{start();time=at;currentStage=difficultyAt().index;boostRemaining=boost?5:0;giantRemaining=.01;visualScale=1.5;objects=[];spawnIn=1e6;nextBrushAt=nextGiantAt=1e6;
  if(air){jump();update(.12);jump();update(.08);giantRemaining=.01;}
@@ -60,7 +60,7 @@ window.balanceTest={start:()=>{start();if(typeof resetRandom==='function')resetR
    r.push({at,boost,air,health:exit.health,giant:exit.giantRemaining,remaining:exit.objects.filter(o=>o.type==='obstacle').length,readyAfter:exit.giantExitReadyAt-exit.time,distance,required});
   }return r;});
   for(const e of exits){assert.equal(e.health,3,JSON.stringify(e));assert.equal(e.giant,0);assert.equal(e.remaining,0);assert(e.readyAfter>=.18-1e-8);assert(e.distance>=e.required,JSON.stringify(e));}
-  // Random generators are compared with fixed seeds; per-window counts are not a fixed contract.
+  // Special replacements use a fixed seed; historical density fixtures predate this placement.
   const output=path.resolve(__dirname,'../work/validation');fs.mkdirSync(output,{recursive:true});for(const capture of await page.evaluate(()=>window.balanceCaptures))fs.writeFileSync(path.join(output,`balance-${capture.at}s.png`),Buffer.from(capture.data.split(',')[1],'base64'));
   console.log(JSON.stringify({result:'PASS',outcomes,exitCases:exits,notes:'Scripted input policies are not measurements of human novice/expert lifetimes.'}));
  }else console.log(JSON.stringify(outcomes,null,2));

@@ -4,7 +4,7 @@
   const canvas = $('game');
   const ctx = canvas.getContext('2d');
   // Background only. Blur is measured in CSS pixels; 1 is unchanged color strength.
-  const BACKGROUND_STYLE = { blurPx: 3, saturation: .83, contrast: .88 };
+  const BACKGROUND_STYLE = { blurPx: 1.25, saturation: .93, contrast: .93 };
   const backgroundLayer = document.createElement('canvas');
   const backgroundCtx = backgroundLayer.getContext('2d');
   const backgroundCache = document.createElement('canvas');
@@ -59,27 +59,10 @@
   let currentStage = 0;
   let nextBrushAt = 14, nextGiantAt = 24;
   let giantExitReadyAt = 0;
-  let obstacleChoices = { single:-1, double:-1 };
-  let randomState = 1, previousRecipe = '';
+  let obstacleChoices = { single:0, double:0 };
   const hudCache = Object.create(null);
   const collectibleCache = new Map();
   let collectibleScale = 0;
-  function resetRandom(seed) {
-    randomState = seed ?? (globalThis.crypto?.getRandomValues ? crypto.getRandomValues(new Uint32Array(1))[0] : (Date.now() ^ Math.random()*0xffffffff));
-    randomState >>>= 0; previousRecipe = '';
-  }
-  function random() {
-    let n = randomState += 0x6D2B79F5;
-    n = Math.imul(n ^ n >>> 15, n | 1); n ^= n + Math.imul(n ^ n >>> 7, n | 61);
-    return ((n ^ n >>> 14) >>> 0) / 4294967296;
-  }
-  const between = (a,b) => a + random()*(b-a);
-  const choose = values => values[Math.floor(random()*values.length)];
-  function chooseRecipe(level) {
-    const options = level.recipes.filter(r=>r.join(',')!==previousRecipe);
-    const recipe = choose(options.length?options:level.recipes);
-    previousRecipe = recipe.join(','); return recipe;
-  }
   const obstaclePaths = OBSTACLES.map(o => o.path);
   const paths = [...Object.values(asset).flat(), ...obstaclePaths];
   const pauseIcons = { running:'assets/ui/기타이미지15.png', paused:'assets/ui/멈춤버튼.png' };
@@ -102,11 +85,7 @@
     const t = c.getContext('2d');
     t.drawImage(img, 0, 0);
     const pixels = t.getImageData(0, 0, c.width, c.height).data;
-    if (obstaclePaths.includes(path)) {
-      const stride=c.width+1, integral=new Uint32Array(stride*(c.height+1));
-      for(let y=0;y<c.height;y++){let row=0;for(let x=0;x<c.width;x++){row+=pixels[(y*c.width+x)*4+3]>=96?1:0;integral[(y+1)*stride+x+1]=integral[y*stride+x+1]+row;}}
-      masks[path] = { data:pixels, width:c.width, height:c.height, integral };
-    }
+    if (obstaclePaths.includes(path)) masks[path] = { data: pixels, width: c.width, height: c.height };
     let left = c.width, top = c.height, right = -1, bottom = -1;
     for (let y = 0; y < c.height; y++) {
       for (let x = 0; x < c.width; x++) {
@@ -204,8 +183,8 @@
     spawnIn = .25; patternIndex = 0; invincible = 0; boostRemaining = 0; giantRemaining = 0; visualScale = 1; orangeSequence = 0;
     objects = []; effects = [];
     flyingObstacles = []; giantIntroRemaining = 0; lastGiantStep = -1;
-    resetRandom(); last=0;
-    currentStage=0; nextBrushAt=between(14,22); nextGiantAt=between(24,36); giantExitReadyAt=0; obstacleChoices={single:-1,double:-1};
+    last=0;
+    currentStage = 0; nextBrushAt = 14; nextGiantAt = 24; giantExitReadyAt = 0; obstacleChoices = {single:0,double:0};
     Object.assign(player, { y: GROUND - player.h, vy: 0, grounded: true, land: 0, jumps: 0 });
     mode = 'running'; panel(null); canvas.focus({preventScroll:true}); $('pause').disabled = false;
     $('pause').setAttribute('aria-label', '일시 정지');
@@ -279,90 +258,82 @@
     }
     return (low+high)/2;
   }
-  function landingGap(previous, next, level, reserveBoost = false) {
+  function landingGap(previous, next, level) {
     const flight=previous.kind==='double'?DOUBLE_FLIGHT:SINGLE_FLIGHT;
     const minSpeed=Math.min(viewportSpeedCap,SPEED*difficultySpeed());
     const approach=Math.max(0,(previous.center??worldWidth+60)-(player.x+player.w/2))/minSpeed;
     const horizon=approach+flight+level.recovery+next.lead+.15;
     // Uncollected brushes can change speed before this group arrives. New brushes
-    // are only placed in the rest area after a group's final obstacle.
-    const mayBoost=reserveBoost || boostRemaining>0 || objects.some(o=>o.type==='brush'&&!o.hit);
+    // replace existing slots in the final arc, never an earlier jump in the group.
+    const mayBoost=boostRemaining>0 || objects.some(o=>o.type==='brush'&&!o.hit);
     const maxSpeed=Math.min(viewportSpeedCap,SPEED*difficultySpeed(time+horizon)*(mayBoost?BOOST_FACTOR:1));
     return maxSpeed*(flight+level.recovery+next.lead)-minSpeed*previous.lead+SPACING_MARGIN+level.extra;
   }
   function spawn() {
-    const level=difficultyAt();
-    const recipe = chooseRecipe(level).map(kind=>kind==='double'&&time<10?'single':kind);
-    // Decide specials before spacing: an in-group brush reserves boosted gaps.
-    const specials=[];
-    if(time>=nextBrushAt && images[asset.brush[0]]){specials.push('brush');nextBrushAt=time+between(36,52);}
-    if(time>=nextGiantAt && images[asset.giant[0]]){specials.push('giant');nextGiantAt=time+between(48,68);}
-    const reserveBoost=specials.includes('brush');
-    const plans=specials.map(type=>({type,mode:choose(recipe.length>1?['arc','gap','run']:['arc','run']),index:Math.floor(random()*recipe.length)}));
-    for(const p of plans)if(p.mode==='gap')p.index=Math.min(p.index,recipe.length-2);
-    // Two specials never share a pickup point.
-    if(plans.length>1 && plans[0].mode===plans[1].mode && plans[0].index===plans[1].index)plans[1].mode='run';
+    const level = difficultyAt();
+    const recipe = level.recipes[patternIndex % level.recipes.length].map(kind=>kind==='double'&&time<10?'single':kind);
     const baseAnchor=worldWidth+60;
-    let anchor=patternIndex===0?Math.min(baseAnchor,player.x+player.w/2+SPEED*2):baseAnchor;
-    if(giantExitReadyAt>time)anchor=Math.max(anchor,player.x+player.w/2+predictTravel(giantExitReadyAt-time+.56)+80);
-    const nodes=[],groundSlots=[];
-    for(let i=0;i<recipe.length;i++){
-      const kind=recipe[i],node={kind,lead:choose(kind==='double'?[.52,.54,.56]:[.33,.36,.39]),center:anchor};
-      if(i){const previous=nodes[i-1];node.center=previous.center+landingGap(previous,node,level,reserveBoost)+between(0,32);
-        if(plans.some(p=>p.mode==='gap'&&p.index===i-1)){
-          const flight=previous.kind==='double'?DOUBLE_FLIGHT:SINGLE_FLIGHT;
-          const pickupX=previous.center+MAX_SPEED*(flight-previous.lead+Math.max(.18,level.recovery)+.12)+48;
-          node.center=Math.max(node.center,pickupX+MAX_SPEED*(node.lead+.3)+80);
-          groundSlots[i-1]=pickupX;
-        }
+    let anchor=patternIndex===0 ? Math.min(baseAnchor,player.x+player.w/2+SPEED*2) : baseAnchor;
+    if(giantExitReadyAt>time) anchor=Math.max(anchor,player.x+player.w/2+predictTravel(giantExitReadyAt-time+.56)+80);
+    const nodes=[];
+    for(let i=0;i<recipe.length;i++) {
+      const kind = recipe[i];
+      const lead = kind==='double' ? [.52,.54,.56][(patternIndex+i)%3] : [.33,.36,.39][(patternIndex+i)%3];
+      const node = {kind, lead, center:anchor};
+      if(nodes.length) {
+        const previous = nodes.at(-1);
+        node.center = previous.center+landingGap(previous,node,level);
       }
       nodes.push(node);
     }
     const created=[];
-    for(const node of nodes){
-      const variants=OBSTACLES.filter(o=>o.kind===node.kind),indices=variants.map((_,i)=>i).filter(i=>i!==obstacleChoices[node.kind]);
-      const selected=choose(indices.length?indices:[0]);obstacleChoices[node.kind]=selected;
-      const descriptor=variants[selected];if(!descriptor||!images[descriptor.path])continue;
-      const img=images[descriptor.path],h=descriptor.height,w=h*img.naturalWidth/img.naturalHeight;
-      const obstacle={type:'obstacle',path:descriptor.path,core:descriptor.core,x:node.center-w/2,y:GROUND-h,w,h,hit:false,pattern:node.kind,lead:node.lead,stage:level.index,group:patternIndex,order:created.length};
-      created.push(obstacle);objects.push(obstacle);
+    const lastArc=[];
+    for(const node of nodes) {
+      if(node.kind==='flat') continue;
+      const variants=OBSTACLES.filter(o=>o.kind===node.kind);
+      const descriptor=variants[obstacleChoices[node.kind]++ % variants.length];
+      if(!descriptor || !images[descriptor.path]) continue;
+      const img=images[descriptor.path], h=descriptor.height, w=h*img.naturalWidth/img.naturalHeight;
+      const obstacle={type:'obstacle',path:descriptor.path,core:descriptor.core,
+        x:node.center-w/2,y:GROUND-h,w,h,hit:false,pattern:node.kind,
+        lead:node.lead,stage:level.index,group:patternIndex,order:created.length};
+      created.push(obstacle); objects.push(obstacle);
     }
-    const pickups=[];
-    const putOrange=(x,y,pattern)=>{
-      const path=asset.items[orangeSequence%asset.items.length];if(!images[path])return;
-      const o={type:'orange',path,x:x-18,y:Math.max(70,Math.min(GROUND-38,y-18)),w:36,h:36,hit:false,phase:orangeSequence*.7,pattern};
-      if(created.some(h=>overlap({...o,y:o.y-5,h:o.h+10},h)))return;
-      pickups.push(o);orangeSequence++;
-    };
-    for(const node of nodes){
-      const roll=random(),count=roll<.16?0:roll<.34?1:3+Math.floor(random()*5);
-      const reaches=arrivalTime(node.center-(player.x+player.w/2)),jumpAt=Math.max(0,reaches-node.lead),at=time+jumpAt,boost=Math.max(0,boostRemaining-jumpAt),approach=predictTravel(node.lead,at,boost);
-      const tail=random()<.35,flight=node.kind==='double'?DOUBLE_FLIGHT:SINGLE_FLIGHT;
-      // Orange-only descent/ground ribbons use the existing landing interval;
-      // they do not replace obstacle groups or slow the difficulty progression.
-      const range=tail?[flight-.22,flight+.07]:node.kind==='double'?[.14,.87]:[.10,.59];
-      for(let i=0;i<count;i++){const t=count===1?(tail?flight:node.lead):range[0]+(range[1]-range[0])*i/(count-1);putOrange(node.center+predictTravel(t,at,boost)-approach,GROUND+Math.min(0,jumpOffset(t,node.kind==='double'))-player.h/2,tail?'run':node.kind);}
+    for(const node of nodes) {
+      const reaches=arrivalTime(node.center-(player.x+player.w/2));
+      const jumpAt=Math.max(0,reaches-node.lead);
+      const at=time+jumpAt, boost=Math.max(0,boostRemaining-jumpAt);
+      const approach=predictTravel(node.lead,at,boost);
+      const samples=node.kind==='flat' ? [0,.17,.34,.51,.68,.85] :
+        node.kind==='double' ? [.16,.28,.42,.56,.70,.84] : [.10,.22,.34,.46,.58];
+      for(const t of samples) {
+        const path=asset.items[orangeSequence%asset.items.length]; if(!images[path]) continue;
+        const x=node.kind==='flat' ? node.center+predictTravel(t,at,boost) : node.center+predictTravel(t,at,boost)-approach;
+        const y=node.kind==='flat' ? GROUND-48 : GROUND+jumpOffset(t,node.kind==='double')-player.h/2;
+        const orange={type:'orange',path,x:x-18,y:Math.max(90,Math.min(GROUND-38,y-18)),w:36,h:36,hit:false,phase:orangeSequence*.7,pattern:node.kind};
+        if(created.some(o=>overlap({...orange,y:orange.y-5,h:orange.h+10},o))) continue;
+        objects.push(orange); if(node === nodes.at(-1)) lastArc.push(orange); orangeSequence++;
+      }
     }
     const lastNode=nodes.at(-1);
-    let after=landingGap(lastNode,{lead:.56},level,reserveBoost)+between(0,32),runIndex=0;
-    for(const plan of plans){
-      const node=nodes[plan.index];let x,y;
-      if(plan.mode==='arc'){
-        x=node.center;y=GROUND+jumpOffset(node.lead,node.kind==='double')-player.h*.5;
-        // Ensure a book/brush can be nestled in a coin trail, not isolated by design.
-        if(random()<.7){const at=time+Math.max(0,arrivalTime(x-player.x-player.w/2)-node.lead);for(const t of [Math.max(.08,node.lead-.16),node.lead+.16])putOrange(x+predictTravel(t,at)-predictTravel(node.lead,at),GROUND+jumpOffset(t,node.kind==='double')-player.h/2,node.kind);}
-      }else{
-        if(plan.mode==='gap')x=groundSlots[plan.index];
-        else{const flight=lastNode.kind==='double'?DOUBLE_FLIGHT:SINGLE_FLIGHT;x=lastNode.center+MAX_SPEED*(flight-lastNode.lead+Math.max(.18,level.recovery)+.16)+80+runIndex++*120;}
-        y=GROUND-58;
-        if(random()<.8)for(const dx of [-96,-48,48,96])putOrange(x+dx,GROUND-48,'flat');
-        after=Math.max(after,x-lastNode.center+MAX_SPEED*(.56+.35)+120);
-      }
-      const o={type:plan.type,path:asset[plan.type][0],x:x-20,y:y-23,w:40,h:46,hit:false,phase:0,placement:plan.mode,group:patternIndex};
-      for(let i=pickups.length-1;i>=0;i--)if(overlap({...o,x:o.x-12,w:o.w+24},pickups[i]))pickups.splice(i,1);
-      pickups.push(o);
+    let after=lastNode.kind==='flat' ? 1000+level.extra : landingGap(lastNode,{lead:.56},level);
+    // A rare replacement, never an additional spawn. Cooldowns are the original
+    // 36s / 48s minimums, and only reset after a replacement actually occurs.
+    const ready = ['brush','giant'].filter(type => images[asset[type][0]] &&
+      time >= (type === 'brush' ? nextBrushAt : nextGiantAt));
+    // Keep the old arcs and every remaining orange exactly where they were.
+    // Use the final arc so a brush cannot accelerate earlier in-group jumps.
+    if (ready.length && lastArc.length && Math.random() < .25) {
+      const type = ready[Math.floor(Math.random()*ready.length)];
+      const slot = lastArc[Math.floor(Math.random()*lastArc.length)];
+      Object.assign(slot, {type, path:asset[type][0]});
+      if (type === 'brush') nextBrushAt = time + 36;
+      else nextGiantAt = time + 48;
+      // Retain the original special-group landing/rest spacing; no new rule.
+      const flight=lastNode.kind==='double'?DOUBLE_FLIGHT:SINGLE_FLIGHT;
+      const rest=lastNode.kind==='flat'?330:MAX_SPEED*(flight+level.recovery)-SPEED*lastNode.lead+48;
+      after=Math.max(after,rest+100+MAX_SPEED*.85);
     }
-    objects.push(...pickups);
     patternIndex++;
     spawnIn=(lastNode.center-anchor+after+Math.max(0,anchor-baseAnchor))/SPEED;
   }
@@ -392,7 +363,6 @@
     const x1 = Math.min(mask.width-1, Math.ceil((Math.min(box.x+box.w,h.x+h.w)-r.x)/r.w*mask.width));
     const y0 = Math.max(0, Math.floor((Math.max(box.y,h.y)-r.y)/r.h*mask.height));
     const y1 = Math.min(mask.height-1, Math.ceil((Math.min(box.y+box.h,h.y+h.h)-r.y)/r.h*mask.height));
-    if(mask.integral){const stride=mask.width+1,p=mask.integral;return p[(y1+1)*stride+x1+1]-p[y0*stride+x1+1]-p[(y1+1)*stride+x0]+p[y0*stride+x0]>0;}
     for(let y=y0;y<=y1;y++) for(let x=x0;x<=x1;x++) if(mask.data[(y*mask.width+x)*4+3]>=96) return true;
     return false;
   }
@@ -478,7 +448,7 @@
     for (const o of objects) o.x -= SPEED * runDt;
     // Resolve pickups first: a book collected on the same step grants immunity immediately.
     for (const o of objects) {
-      if (o.type==='obstacle' || o.hit || o.x>pickupBox.x+pickupBox.w+12 || o.x+o.w<pickupBox.x-12 || !collides(pickupBox,o)) continue;
+      if (o.type==='obstacle' || o.hit || !collides(pickupBox,o)) continue;
       if (o.type==='orange') {
         o.hit=true; score+=100; collectEffect(100);
       } else if(o.type==='brush') {
@@ -493,7 +463,7 @@
     if(giantWasActive && giantRemaining===0) secureGiantExit();
     const giantBox=giantRemaining>0?destructionBox():null;
     for (const o of objects) {
-      if (o.type!=='obstacle' || o.x>(giantBox||damageBox).x+(giantBox||damageBox).w+12 || o.x+o.w<(giantBox||damageBox).x-12 || (o.hit && giantRemaining<=0) || o.destroyed || !collides(giantBox||damageBox,o)) continue;
+      if (o.type!=='obstacle' || (o.hit && giantRemaining<=0) || o.destroyed || !collides(giantBox||damageBox,o)) continue;
       if (giantRemaining>0) {
         smashObstacle(o);
       } else if(invincible<=0) {

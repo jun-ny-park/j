@@ -15,7 +15,7 @@ button,kbd{font-family:inherit}button{font-weight:400}.brand{font-weight:400}hea
 canvas:focus{outline:none}canvas:focus-visible{outline:2px solid #c9a572;outline-offset:-3px}
 
 .overlay{container-type:size}
-.result{position:relative;isolation:isolate;container-type:inline-size;flex:none;width:min(400px,calc(100% - 12px),calc(94cqh * 217 / 201));aspect-ratio:217/201;filter:drop-shadow(0 9px 18px #76512533)}
+.result{position:relative;isolation:isolate;container-type:inline-size;flex:none;width:min(340px,calc(85% - 10.2px),calc(79.9cqh * 217 / 201));aspect-ratio:217/201;filter:drop-shadow(0 9px 18px #76512533)}
 .result>img{display:block;width:100%;height:100%;object-fit:contain;pointer-events:none}
 /* Historic result layout, with the requested smaller upper-right heading,
    raised caption, and a thinner centered retry button. */
@@ -31,7 +31,7 @@ canvas:focus{outline:none}canvas:focus-visible{outline:2px solid #c9a572;outline
 #final-score{top:54%;height:16%;font-size:clamp(9px,calc(100cqw / var(--score-chars,2)),12.06cqw);font-weight:700;font-variant-numeric:tabular-nums}
 .result button{position:absolute;z-index:2;left:28.27%;top:72.62%;width:43.46%;height:14.76%;margin:0;padding:0 6px;border:0;border-radius:999px;background:#61a2bf;color:#fff9df;cursor:pointer;display:flex;align-items:center;justify-content:center;font-family:inherit;font-size:6.14cqw;font-weight:400;line-height:1;white-space:nowrap;touch-action:manipulation}
 .result button span{position:static;display:block;width:auto;height:auto;margin:0;padding:0;background:none;color:inherit;font:inherit}
-@media(max-width:640px){.result{width:min(400px,calc(100% - 12px),calc(94cqh * 217 / 201))}}
+@media(max-width:640px){.result{width:min(340px,calc(85% - 10.2px),calc(79.9cqh * 217 / 201))}}
 
 /* Keep one landscape layout on touch devices, rotating the whole page only in portrait. */
 @media (hover:none) and (pointer:coarse) and (max-width:1024px){
@@ -55,7 +55,7 @@ canvas:focus{outline:none}canvas:focus-visible{outline:2px solid #c9a572;outline
   .game-footer{font-size:11px;line-height:1}
   .effect-timers{top:57px;right:12px}.timer{font-size:18px;min-width:40px;padding:2px 7px}.timer-giant{padding:0 5px}
   .paused{min-width:245px;padding:15px 20px}.paused h2{font-size:27px}
-  .result{width:min(400px,90cqw,calc(94cqh * 217 / 201));height:auto;max-width:none}
+  .result{width:min(340px,76.5cqw,calc(79.9cqh * 217 / 201));height:auto;max-width:none}
 }
 @media (hover:none) and (pointer:coarse) and (max-width:1024px) and (orientation:portrait){
   main{width:100vh;height:100vw;width:100dvh;height:100dvw;padding:max(4px,env(safe-area-inset-right)) max(8px,env(safe-area-inset-bottom)) max(4px,env(safe-area-inset-left)) max(8px,env(safe-area-inset-top));transform:translateX(100vw) rotate(90deg);transform:translateX(100dvw) rotate(90deg)}
@@ -82,3 +82,12 @@ canvas:focus{outline:none}canvas:focus-visible{outline:2px solid #c9a572;outline
   .welcome .start-item-guide{margin-bottom:0}
   .welcome small{margin-top:0}
 }
+
+/* Use the actual health-track center (41% + 36%/2), in the same HUD row.
+   The old button width/gap are reserved, so health and score do not move. */
+.hud{--pause-width:42px;--pause-gap:12px;z-index:auto}
+.health-panel{margin-right:calc(var(--pause-width) + var(--pause-gap))}
+#pause{position:absolute;z-index:4;left:calc(100% + var(--pause-gap));top:59%;transform:translateY(-50%);width:var(--pause-width)}
+#pause:hover{transform:translateY(-50%);filter:brightness(1.05)}
+@media(max-width:640px){.hud{--pause-width:31px;--pause-gap:5px}}
+@media(hover:none) and (pointer:coarse) and (max-width:1024px){.hud{--pause-width:31px;--pause-gap:8px}}

@@ -21,7 +21,7 @@ node tests/pause-image.cjs
 node tests/collection.cjs
 node tests/giant-smash.cjs
 node tests/difficulty.cjs
-node tests/random-patterns.cjs
+node tests/restoration.cjs
 node tests/performance.cjs
 node tests/balance.cjs
 node tests/backgrounds.cjs
@@ -42,6 +42,6 @@ node tests/background-style.cjs
 
 `ui-details.cjs`는 `613e78b`의 CSS와 비교해 버튼 축소율·제목 이동·멈춤 버튼 크기 유지를 측정합니다(해당 커밋을 포함한 Git 기록 필요). 일시정지 이미지 전환 반복·실패 시 대체, 0~3 체력 숫자 중앙 정렬, 실제 44px 터치 확장 영역 클릭도 검사합니다.
 
-`pause-image.cjs`는 PNG 실제 포맷·알파·원본 크기·불투명 RGB 일치·꽃잎/하이라이트 보존·외곽 체크무늬 투명을 검사합니다. `background-style.cjs`는 3px/83%/88% 기본 설정과 DPR별 강도, 모든 전경의 filter=none 및 불투명한 반복 경계를 검사합니다.
+`pause-image.cjs`는 PNG 실제 포맷·알파·원본 크기·불투명 RGB 일치·꽃잎/하이라이트 보존·외곽 체크무늬 투명을 검사합니다. `background-style.cjs`는 1.25px/93%/93% 기본 설정과 DPR별 강도, 모든 전경의 filter=none 및 불투명한 반복 경계를 검사합니다.
 
-`random-patterns.cjs`는 시드별 다양성·아이템 희귀성·중간 배치의 회피/수집을 검증합니다. `performance.cjs`는 `0195379`의 코드와 캐시 구현을 같은 장면으로 비교하므로 해당 커밋을 포함한 Git 기록이 필요합니다. 벤치마크는 픽셀 읽기를 강제한 비용이며 실제 FPS 측정이 아닙니다.
+`restoration.cjs`는 기존 배치와의 좌표 일치·귤 자리 대체·멈춤 토글·두루마리 85% 축소를 검증합니다. `performance.cjs`는 `0195379`의 코드와 캐시 구현을 같은 장면으로 비교하므로 해당 커밋을 포함한 Git 기록이 필요합니다. 벤치마크는 픽셀 읽기를 강제한 비용이며 실제 FPS 측정이 아닙니다.
